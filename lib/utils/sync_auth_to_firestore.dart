@@ -1,22 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:save_bite/services/auth_serivce.dart';
 
 /// Utility to sync existing Firebase Authentication users to Firestore
 /// This is useful for fixing accounts that were created in Auth but not saved to Firestore
 class SyncAuthToFirestore {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Check if a user exists in Firestore
-  Future<bool> userExistsInFirestore(String uid) async {
-    try {
-      final doc = await _firestore.collection('users').doc(uid).get();
-      return doc.exists;
-    } catch (e) {
-      print('Error checking user in Firestore: $e');
-      return false;
-    }
-  }
+  final AuthService _authService = AuthService();
 
   /// Sync current authenticated user to Firestore
   /// This will create a Firestore document for the user if it doesn't exist
@@ -31,11 +23,11 @@ class SyncAuthToFirestore {
       throw Exception('No user is currently logged in');
     }
 
-    // Check if user already exists in Firestore
-    final exists = await userExistsInFirestore(user.uid);
+    // Check if user already exists in Firestore using AuthService
+    final exists = await _authService.userExistsInFirestore(user.uid);
     
     if (exists) {
-      print('User ${user.email} already exists in Firestore');
+      debugPrint('User ${user.email} already exists in Firestore');
       return;
     }
 
@@ -51,9 +43,9 @@ class SyncAuthToFirestore {
         'syncedFromAuth': true, // Flag to indicate this was synced
       });
       
-      print('Successfully synced user ${user.email} to Firestore');
+      debugPrint('Successfully synced user ${user.email} to Firestore');
     } catch (e) {
-      print('Failed to sync user to Firestore: $e');
+      debugPrint('Failed to sync user to Firestore: $e');
       rethrow;
     }
   }

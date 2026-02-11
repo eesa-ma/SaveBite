@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -37,7 +38,7 @@ class AuthService {
           await credential!.user!.delete();
         } catch (deleteError) {
           // Log delete error but throw the original error
-          print('Failed to delete user after Firestore error: $deleteError');
+          debugPrint('Failed to delete user after Firestore error: $deleteError');
         }
       }
       // Re-throw the original error
@@ -73,7 +74,7 @@ class AuthService {
       }
       return null;
     } catch (e) {
-      print('Error fetching user data: $e');
+      debugPrint('Error fetching user data: $e');
       return null;
     }
   }
@@ -84,7 +85,7 @@ class AuthService {
       final doc = await _firestore.collection('users').doc(uid).get();
       return doc.exists;
     } catch (e) {
-      print('Error checking user in Firestore: $e');
+      debugPrint('Error checking user in Firestore: $e');
       return false;
     }
   }
