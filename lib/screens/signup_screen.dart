@@ -78,6 +78,8 @@ class _SignupScreenState extends State<SignupScreen> {
         await _authService.signUp(
           _emailController.text.trim(),
           _passwordController.text,
+          _nameController.text.trim(),
+          _selectedRole,
         );
       }
 
