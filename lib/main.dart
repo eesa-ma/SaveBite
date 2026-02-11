@@ -1,7 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:save_bite/firebase_options.dart';
-import 'package:save_bite/screens/login_screen.dart'; // Import the LoginScreen
+import 'package:save_bite/screens/home_screen.dart'; // Import the HomeScreen
+import 'package:save_bite/screens/entry_screen.dart'; // Import the EntryScreen
+import 'package:save_bite/screens/owner_dashboard.dart';
+import 'package:save_bite/screens/admin_dashboard.dart';
+import 'package:save_bite/screens/signup_screen.dart';
 
 void main() async {
   // Firebase initialization
@@ -22,7 +26,14 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFF2E7D32)),
       ),
-      home: const LoginScreen(), // Set LoginScreen as the home screen
+      home: const EntryScreen(), // Set EntryScreen as the entry point
+      routes: {
+        '/login': (context) => const SignupScreen(),
+        '/home': (context) => const HomeScreen(),
+        '/entry': (context) => const EntryScreen(),
+        '/owner': (context) => const OwnerDashboard(),
+        '/admin': (context) => const AdminDashboard(),
+      },
     );
   }
 }
