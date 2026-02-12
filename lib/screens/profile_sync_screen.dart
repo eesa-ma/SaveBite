@@ -15,7 +15,7 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
   final AuthService _authService = AuthService();
   final SyncAuthToFirestore _syncService = SyncAuthToFirestore();
   final TextEditingController _nameController = TextEditingController();
-  
+
   String _selectedRole = 'User';
   bool _isLoading = false;
 
@@ -42,15 +42,12 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
       );
 
       if (!mounted) return;
-      
+
       setState(() {
         _isLoading = false;
       });
 
-      _showSnackbar(
-        'Profile synced successfully!',
-        const Color(0xFF2E7D32),
-      );
+      _showSnackbar('Profile synced successfully!', const Color(0xFF2E7D32));
 
       // Navigate to appropriate dashboard based on role
       final route = _routeForRole(_selectedRole);
@@ -68,7 +65,7 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
   String _routeForRole(String role) {
     switch (role) {
       case 'Restaurant':
-        return '/owner';
+        return '/restaurant';
       case 'Admin':
         return '/admin';
       case 'User':
@@ -92,7 +89,7 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _authService.getCurrentUser();
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
@@ -141,7 +138,7 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
                   ),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<String>(
-                    value: _selectedRole,
+                    initialValue: _selectedRole,
                     decoration: InputDecoration(
                       labelText: 'Select Role',
                       border: OutlineInputBorder(
@@ -154,10 +151,7 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
                         value: 'Restaurant',
                         child: Text('Restaurant'),
                       ),
-                      DropdownMenuItem(
-                        value: 'Admin',
-                        child: Text('Admin'),
-                      ),
+                      DropdownMenuItem(value: 'Admin', child: Text('Admin')),
                     ],
                     onChanged: (String? newValue) {
                       setState(() {

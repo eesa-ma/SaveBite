@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 
@@ -111,147 +110,134 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : userData == null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.person_off,
-                        size: 80,
-                        color: Colors.grey,
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.person_off, size: 80, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Not logged in',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/login');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 12,
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Not logged in',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                    ),
+                    child: const Text('Login / Sign Up'),
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // User Info Card
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 2,
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pushNamed('/login');
-                        },
-                        style: ElevatedButton.styleFrom(
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 40,
                           backgroundColor: const Color(0xFF2E7D32),
-                          foregroundColor: Colors.white,
+                          child: Text(
+                            (userData?['name'] ?? 'U')[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          userData?['name'] ?? 'User',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          Icons.phone,
+                          userData?['phone'] ?? 'Not provided',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          Icons.email,
+                          userData?['email'] ?? 'Not provided',
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 12,
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2E7D32).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            userData?['role'] ?? 'User',
+                            style: const TextStyle(
+                              color: Color(0xFF2E7D32),
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        child: const Text('Login / Sign Up'),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                )
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // User Info Card
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.all(16),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
-                              spreadRadius: 2,
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: const Color(0xFF2E7D32),
-                              child: Text(
-                                (userData?['name'] ?? 'U')[0].toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              userData?['name'] ?? 'User',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              Icons.phone,
-                              userData?['phone'] ?? 'Not provided',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              Icons.email,
-                              userData?['email'] ?? 'Not provided',
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2E7D32).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                userData?['role'] ?? 'User',
-                                style: const TextStyle(
-                                  color: Color(0xFF2E7D32),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
 
-                      // Menu Items
-                      _buildMenuSection(
-                        'Orders',
-                        [
-                          _buildMenuItem(
-                            icon: Icons.history,
-                            title: 'Order History',
-                            onTap: () {},
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.favorite,
-                            title: 'Favourites',
-                            onTap: () {},
-                          ),
-                        ],
-                      ),
-                      _buildMenuSection(
-                        'Settings',
-                        [
-                          _buildMenuItem(
-                            icon: Icons.logout,
-                            title: 'Logout',
-                            onTap: _logout,
-                            isDestructive: true,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
+                  // Menu Items
+                  _buildMenuSection('Orders', [
+                    _buildMenuItem(
+                      icon: Icons.history,
+                      title: 'Order History',
+                      onTap: () {},
+                    ),
+                    _buildMenuItem(
+                      icon: Icons.favorite,
+                      title: 'Favourites',
+                      onTap: () {},
+                    ),
+                  ]),
+                  _buildMenuSection('Settings', [
+                    _buildMenuItem(
+                      icon: Icons.logout,
+                      title: 'Logout',
+                      onTap: _logout,
+                      isDestructive: true,
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
     );
   }
 
@@ -264,10 +250,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Flexible(
           child: Text(
             text,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
             overflow: TextOverflow.ellipsis,
           ),
         ),

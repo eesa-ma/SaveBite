@@ -34,6 +34,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/entry': (context) => const EntryScreen(),
         '/owner': (context) => const OwnerDashboard(),
+        '/restaurant': (context) => const OwnerDashboard(),
         '/admin': (context) => const AdminDashboard(),
         '/profile': (context) => const ProfileScreen(),
         '/profile-sync': (context) => const ProfileSyncScreen(),

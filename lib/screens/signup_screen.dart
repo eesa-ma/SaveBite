@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -50,36 +49,32 @@ class _SignupScreenState extends State<SignupScreen> {
 
     try {
       String userRole = _selectedRole;
-      
+
       if (_isLogin) {
         final user = await _authService.login(
           _emailController.text.trim(),
           _passwordController.text,
         );
-        
+
         // Check if user exists in Firestore
         if (user != null) {
           final exists = await _authService.userExistsInFirestore(user.uid);
-          
+
           if (!exists) {
             // User exists in Auth but not in Firestore, redirect to sync screen
             if (!mounted) return;
             setState(() {
               _isLoading = false;
             });
-            
-            _showSnackbar(
-              'Please complete your profile',
-              Colors.orange,
-            );
-            
-            Navigator.of(context).pushNamedAndRemoveUntil(
-              '/profile-sync',
-              (r) => false,
-            );
+
+            _showSnackbar('Please complete your profile', Colors.orange);
+
+            Navigator.of(
+              context,
+            ).pushNamedAndRemoveUntil('/profile-sync', (r) => false);
             return;
           }
-          
+
           // User exists in Firestore, get their role
           final userData = await _authService.getUserData(user.uid);
           if (userData != null && userData['role'] != null) {
@@ -124,7 +119,7 @@ class _SignupScreenState extends State<SignupScreen> {
   String _routeForRole(String role) {
     switch (role) {
       case 'Restaurant':
-        return '/owner';
+        return '/restaurant';
       case 'Admin':
         return '/admin';
       case 'User':
@@ -259,7 +254,10 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'User', child: Text('User')),
+                            DropdownMenuItem(
+                              value: 'User',
+                              child: Text('User'),
+                            ),
                             DropdownMenuItem(
                               value: 'Restaurant',
                               child: Text('Restaurant Owner'),
