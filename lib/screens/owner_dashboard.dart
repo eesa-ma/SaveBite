@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_serivce.dart';
 
 class OwnerDashboard extends StatelessWidget {
   const OwnerDashboard({super.key});
@@ -14,9 +15,57 @@ class OwnerDashboard extends StatelessWidget {
         elevation: 0,
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              _showNotifications(context);
+            },
             icon: const Icon(Icons.notifications_outlined),
             tooltip: 'Notifications',
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Menu',
+            offset: const Offset(0, 50),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onSelected: (value) {
+              _handleMenuSelection(context, value);
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'details',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.store, color: Color(0xFF2E7D32)),
+                  title: Text('Restaurant Details'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.person, color: Color(0xFF2E7D32)),
+                  title: Text('My Profile'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.settings, color: Color(0xFF2E7D32)),
+                  title: Text('Settings'),
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.logout, color: Colors.red),
+                  title: Text('Logout', style: TextStyle(color: Colors.red)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -547,4 +596,384 @@ class _MenuItem {
   bool isAvailable;
   final String category;
   final String emoji;
+}
+
+// Helper Functions
+void _handleMenuSelection(BuildContext context, String value) async {
+  switch (value) {
+    case 'details':
+      _showRestaurantDetails(context);
+      break;
+    case 'profile':
+      _showProfile(context);
+      break;
+    case 'settings':
+      _showSettings(context);
+      break;
+    case 'logout':
+      _handleLogout(context);
+      break;
+  }
+}
+
+void _showNotifications(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.notifications, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('Notifications'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            _NotificationTile(
+              icon: Icons.shopping_bag,
+              title: 'New Order #1021',
+              subtitle: '4 items • \$28.50',
+              time: '2 min ago',
+              color: const Color(0xFF2E7D32),
+            ),
+            _NotificationTile(
+              icon: Icons.star,
+              title: 'New Review',
+              subtitle: 'Great food and service!',
+              time: '15 min ago',
+              color: const Color(0xFFF57C00),
+            ),
+            _NotificationTile(
+              icon: Icons.local_offer,
+              title: 'Deal Expiring Soon',
+              subtitle: 'Lunch Special ends in 2 hours',
+              time: '1 hour ago',
+              color: const Color(0xFF6A1B9A),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2E7D32),
+          ),
+          child: const Text('View All'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showRestaurantDetails(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.store, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('Restaurant Details'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DetailRow(label: 'Name', value: 'Green Bowl Kitchen'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Address', value: 'Sector 21, Chandigarh'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Phone', value: '+91 98765 43210'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Email', value: 'contact@greenbowl.com'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Rating', value: '4.6 ⭐ (342 reviews)'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Operating Hours', value: '9:00 AM - 10:00 PM'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Edit feature coming soon!')),
+            );
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2E7D32),
+          ),
+          child: const Text('Edit Details'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showProfile(BuildContext context) async {
+  final authService = AuthService();
+  final user = authService.getCurrentUser();
+  
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No user logged in')),
+    );
+    return;
+  }
+
+  final userData = await authService.getUserData(user.uid);
+  
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.person, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('My Profile'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: CircleAvatar(
+              radius: 40,
+              backgroundColor: const Color(0xFF2E7D32).withOpacity(0.1),
+              child: const Icon(
+                Icons.person,
+                size: 50,
+                color: Color(0xFF2E7D32),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _DetailRow(label: 'Name', value: userData?['name'] ?? 'N/A'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Email', value: user.email ?? 'N/A'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Phone', value: userData?['phone'] ?? 'N/A'),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Role', value: userData?['role'] ?? 'N/A'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Edit profile feature coming soon!')),
+            );
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2E7D32),
+          ),
+          child: const Text('Edit Profile'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showSettings(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.settings, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('Settings'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.notifications, color: Color(0xFF2E7D32)),
+            title: const Text('Notifications'),
+            trailing: Switch(
+              value: true,
+              onChanged: (value) {},
+              activeColor: const Color(0xFF2E7D32),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.language, color: Color(0xFF2E7D32)),
+            title: const Text('Language'),
+            trailing: const Text('English'),
+            onTap: () {},
+          ),
+          ListTile(
+            leading: const Icon(Icons.dark_mode, color: Color(0xFF2E7D32)),
+            title: const Text('Dark Mode'),
+            trailing: Switch(
+              value: false,
+              onChanged: (value) {},
+              activeColor: const Color(0xFF2E7D32),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.help, color: Color(0xFF2E7D32)),
+            title: const Text('Help & Support'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {},
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _handleLogout(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.logout, color: Colors.red),
+          SizedBox(width: 8),
+          Text('Logout'),
+        ],
+      ),
+      content: const Text('Are you sure you want to logout?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final authService = AuthService();
+            try {
+              await authService.logout();
+              Navigator.pop(context); // Close dialog
+              Navigator.pushReplacementNamed(context, '/entry');
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Logged out successfully'),
+                  backgroundColor: Color(0xFF2E7D32),
+                ),
+              );
+            } catch (e) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error logging out: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.red,
+          ),
+          child: const Text('Logout'),
+        ),
+      ],
+    ),
+  );
+}
+
+// UI Helper Widgets
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.time,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String time;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.1),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text(subtitle),
+          const SizedBox(height: 4),
+          Text(
+            time,
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+      isThreeLine: true,
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
 }
