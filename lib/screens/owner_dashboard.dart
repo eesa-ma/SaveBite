@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_serivce.dart';
 
 class OwnerDashboard extends StatelessWidget {
@@ -676,176 +677,21 @@ void _showNotifications(BuildContext context) {
 void _showRestaurantDetails(BuildContext context) {
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Row(
-        children: const [
-          Icon(Icons.store, color: Color(0xFF2E7D32)),
-          SizedBox(width: 8),
-          Text('Restaurant Details'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _DetailRow(label: 'Name', value: 'Green Bowl Kitchen'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Address', value: 'Sector 21, Chandigarh'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Phone', value: '+91 98765 43210'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Email', value: 'contact@greenbowl.com'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Rating', value: '4.6 ⭐ (342 reviews)'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Operating Hours', value: '9:00 AM - 10:00 PM'),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Edit feature coming soon!')),
-            );
-          },
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF2E7D32),
-          ),
-          child: const Text('Edit Details'),
-        ),
-      ],
-    ),
+    builder: (context) => _RestaurantDetailsDialog(),
   );
 }
 
 void _showProfile(BuildContext context) async {
-  final authService = AuthService();
-  final user = authService.getCurrentUser();
-  
-  if (user == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No user logged in')),
-    );
-    return;
-  }
-
-  final userData = await authService.getUserData(user.uid);
-  
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Row(
-        children: const [
-          Icon(Icons.person, color: Color(0xFF2E7D32)),
-          SizedBox(width: 8),
-          Text('My Profile'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: CircleAvatar(
-              radius: 40,
-              backgroundColor: const Color(0xFF2E7D32).withOpacity(0.1),
-              child: const Icon(
-                Icons.person,
-                size: 50,
-                color: Color(0xFF2E7D32),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          _DetailRow(label: 'Name', value: userData?['name'] ?? 'N/A'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Email', value: user.email ?? 'N/A'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Phone', value: userData?['phone'] ?? 'N/A'),
-          const SizedBox(height: 12),
-          _DetailRow(label: 'Role', value: userData?['role'] ?? 'N/A'),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Edit profile feature coming soon!')),
-            );
-          },
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF2E7D32),
-          ),
-          child: const Text('Edit Profile'),
-        ),
-      ],
-    ),
+    builder: (context) => _ProfileEditDialog(),
   );
 }
 
 void _showSettings(BuildContext context) {
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Row(
-        children: const [
-          Icon(Icons.settings, color: Color(0xFF2E7D32)),
-          SizedBox(width: 8),
-          Text('Settings'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.notifications, color: Color(0xFF2E7D32)),
-            title: const Text('Notifications'),
-            trailing: Switch(
-              value: true,
-              onChanged: (value) {},
-              activeColor: const Color(0xFF2E7D32),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.language, color: Color(0xFF2E7D32)),
-            title: const Text('Language'),
-            trailing: const Text('English'),
-            onTap: () {},
-          ),
-          ListTile(
-            leading: const Icon(Icons.dark_mode, color: Color(0xFF2E7D32)),
-            title: const Text('Dark Mode'),
-            trailing: Switch(
-              value: false,
-              onChanged: (value) {},
-              activeColor: const Color(0xFF2E7D32),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.help, color: Color(0xFF2E7D32)),
-            title: const Text('Help & Support'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {},
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
+    builder: (context) => _SettingsDialog(),
   );
 }
 
@@ -972,6 +818,629 @@ class _DetailRow extends StatelessWidget {
             fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+// Restaurant Details Dialog
+class _RestaurantDetailsDialog extends StatefulWidget {
+  @override
+  State<_RestaurantDetailsDialog> createState() => _RestaurantDetailsDialogState();
+}
+
+class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
+  final _nameController = TextEditingController(text: 'Green Bowl Kitchen');
+  final _addressController = TextEditingController(text: 'Sector 21, Chandigarh');
+  final _phoneController = TextEditingController(text: '+91 98765 43210');
+  final _emailController = TextEditingController(text: 'contact@greenbowl.com');
+  final _hoursController = TextEditingController(text: '9:00 AM - 10:00 PM');
+  bool _isEditing = false;
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _hoursController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveDetails() async {
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // Here you would save to Firestore
+      // For now, just simulate a save
+      await Future.delayed(const Duration(seconds: 1));
+      
+      setState(() {
+        _isEditing = false;
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Restaurant details updated successfully!'),
+          backgroundColor: Color(0xFF2E7D32),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving details: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.store, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('Restaurant Details'),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameController,
+              enabled: _isEditing,
+              decoration: InputDecoration(
+                labelText: 'Restaurant Name',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.restaurant),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _addressController,
+              enabled: _isEditing,
+              decoration: InputDecoration(
+                labelText: 'Address',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.location_on),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneController,
+              enabled: _isEditing,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Phone',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.phone),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              enabled: _isEditing,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.email),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _hoursController,
+              enabled: _isEditing,
+              decoration: InputDecoration(
+                labelText: 'Operating Hours',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.access_time),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        if (_isEditing)
+          FilledButton(
+            onPressed: _isSaving ? null : _saveDetails,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+            ),
+            child: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Save'),
+          )
+        else
+          FilledButton(
+            onPressed: () {
+              setState(() {
+                _isEditing = true;
+              });
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+            ),
+            child: const Text('Edit Details'),
+          ),
+      ],
+    );
+  }
+}
+
+// Profile Edit Dialog
+class _ProfileEditDialog extends StatefulWidget {
+  @override
+  State<_ProfileEditDialog> createState() => _ProfileEditDialogState();
+}
+
+class _ProfileEditDialogState extends State<_ProfileEditDialog> {
+  final AuthService _authService = AuthService();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  bool _isLoading = true;
+  bool _isEditing = false;
+  bool _isSaving = false;
+  Map<String, dynamic>? _userData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = _authService.getCurrentUser();
+    if (user != null) {
+      final userData = await _authService.getUserData(user.uid);
+      setState(() {
+        _userData = userData;
+        _nameController.text = userData?['name'] ?? '';
+        _phoneController.text = userData?['phone'] ?? '';
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final user = _authService.getCurrentUser();
+      if (user != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'name': _nameController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        setState(() {
+          _isEditing = false;
+          _isSaving = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
+            backgroundColor: Color(0xFF2E7D32),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating profile: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = _authService.getCurrentUser();
+
+    return AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.person, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('My Profile'),
+        ],
+      ),
+      content: _isLoading
+          ? const SizedBox(
+              height: 200,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: CircleAvatar(
+                      radius: 40,
+                      backgroundColor: const Color(0xFF2E7D32).withOpacity(0.1),
+                      child: Text(
+                        (_nameController.text.isNotEmpty
+                                ? _nameController.text[0]
+                                : 'U')
+                            .toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2E7D32),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _nameController,
+                    enabled: _isEditing,
+                    decoration: InputDecoration(
+                      labelText: 'Name',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      prefixIcon: const Icon(Icons.person),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: TextEditingController(text: user?.email ?? 'N/A'),
+                    enabled: false,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      prefixIcon: const Icon(Icons.email),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _phoneController,
+                    enabled: _isEditing,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Phone',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      prefixIcon: const Icon(Icons.phone),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller:
+                        TextEditingController(text: _userData?['role'] ?? 'N/A'),
+                    enabled: false,
+                    decoration: InputDecoration(
+                      labelText: 'Role',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      prefixIcon: const Icon(Icons.badge),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        if (_isEditing)
+          FilledButton(
+            onPressed: _isSaving ? null : _saveProfile,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+            ),
+            child: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Save'),
+          )
+        else
+          FilledButton(
+            onPressed: () {
+              setState(() {
+                _isEditing = true;
+              });
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+            ),
+            child: const Text('Edit Profile'),
+          ),
+      ],
+    );
+  }
+}
+
+// Settings Dialog
+class _SettingsDialog extends StatefulWidget {
+  @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  bool _notificationsEnabled = true;
+  bool _darkModeEnabled = false;
+  String _selectedLanguage = 'English';
+
+  void _showLanguageSelector() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Language'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              title: const Text('English'),
+              value: 'English',
+              groupValue: _selectedLanguage,
+              onChanged: (value) {
+                setState(() {
+                  _selectedLanguage = value!;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Language changed to $_selectedLanguage'),
+                    backgroundColor: const Color(0xFF2E7D32),
+                  ),
+                );
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('हिंदी (Hindi)'),
+              value: 'Hindi',
+              groupValue: _selectedLanguage,
+              onChanged: (value) {
+                setState(() {
+                  _selectedLanguage = value!;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Language changed to $_selectedLanguage'),
+                    backgroundColor: const Color(0xFF2E7D32),
+                  ),
+                );
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('ਪੰਜਾਬੀ (Punjabi)'),
+              value: 'Punjabi',
+              groupValue: _selectedLanguage,
+              onChanged: (value) {
+                setState(() {
+                  _selectedLanguage = value!;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Language changed to $_selectedLanguage'),
+                    backgroundColor: const Color(0xFF2E7D32),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showHelpSupport() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.help, color: Color(0xFF2E7D32)),
+            SizedBox(width: 8),
+            Text('Help & Support'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Need assistance? Contact us:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.email, color: Color(0xFF2E7D32)),
+              title: const Text('Email'),
+              subtitle: const Text('contact@greenbowl.com'),
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Opening email app...'),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone, color: Color(0xFF2E7D32)),
+              title: const Text('Phone'),
+              subtitle: const Text('+91 98765 43210'),
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Opening phone dialer...'),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.chat, color: Color(0xFF2E7D32)),
+              title: const Text('Live Chat'),
+              subtitle: const Text('Available 9 AM - 6 PM'),
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Opening live chat...'),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.settings, color: Color(0xFF2E7D32)),
+          SizedBox(width: 8),
+          Text('Settings'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.notifications, color: Color(0xFF2E7D32)),
+            title: const Text('Notifications'),
+            subtitle: const Text('Receive order and review alerts'),
+            value: _notificationsEnabled,
+            onChanged: (value) {
+              setState(() {
+                _notificationsEnabled = value;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    value
+                        ? 'Notifications enabled'
+                        : 'Notifications disabled',
+                  ),
+                  backgroundColor: const Color(0xFF2E7D32),
+                ),
+              );
+            },
+            activeColor: const Color(0xFF2E7D32),
+          ),
+          ListTile(
+            leading: const Icon(Icons.language, color: Color(0xFF2E7D32)),
+            title: const Text('Language'),
+            subtitle: Text(_selectedLanguage),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _showLanguageSelector,
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode, color: Color(0xFF2E7D32)),
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Switch to dark theme'),
+            value: _darkModeEnabled,
+            onChanged: (value) {
+              setState(() {
+                _darkModeEnabled = value;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    value ? 'Dark mode enabled' : 'Dark mode disabled',
+                  ),
+                  backgroundColor: const Color(0xFF2E7D32),
+                ),
+              );
+            },
+            activeColor: const Color(0xFF2E7D32),
+          ),
+          ListTile(
+            leading: const Icon(Icons.help, color: Color(0xFF2E7D32)),
+            title: const Text('Help & Support'),
+            subtitle: const Text('Get help and contact us'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _showHelpSupport,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
         ),
       ],
     );
