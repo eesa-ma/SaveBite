@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:save_bite/services/auth_serivce.dart';
 
 class Restaurant {
   final String id;
@@ -32,6 +33,7 @@ class EntryScreen extends StatefulWidget {
 }
 
 class _EntryScreenState extends State<EntryScreen> {
+  final AuthService _authService = AuthService();
   final TextEditingController searchController = TextEditingController();
   final FocusNode searchFocusNode = FocusNode();
   String selectedFilter = 'All';
@@ -161,7 +163,14 @@ class _EntryScreenState extends State<EntryScreen> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: _showRoleSelection,
+                    onTap: () {
+                      final user = _authService.getCurrentUser();
+                      if (user != null) {
+                        Navigator.of(context).pushNamed('/profile');
+                      } else {
+                        Navigator.of(context).pushNamed('/login');
+                      }
+                    },
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -228,7 +237,7 @@ class _EntryScreenState extends State<EntryScreen> {
             ),
 
             const SizedBox(height: 16),
-
+/* 
             // Scan a Heart Promotional Banner
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -377,7 +386,7 @@ class _EntryScreenState extends State<EntryScreen> {
             ),
 
             const SizedBox(height: 24),
-
+*/
             // What's on your mind section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -789,116 +798,6 @@ class _EntryScreenState extends State<EntryScreen> {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showRoleSelection() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Select Your Role',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(height: 24),
-              _buildRoleCard(
-                role: 'customer',
-                title: 'Customer',
-                description: 'Order discounted food',
-                icon: Icons.shopping_cart,
-              ),
-              const SizedBox(height: 12),
-              _buildRoleCard(
-                role: 'restaurant',
-                title: 'Restaurant Owner',
-                description: 'Manage listings and offers',
-                icon: Icons.restaurant,
-              ),
-              const SizedBox(height: 12),
-              _buildRoleCard(
-                role: 'admin',
-                title: 'Admin',
-                description: 'Manage platform',
-                icon: Icons.admin_panel_settings,
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildRoleCard({
-    required String role,
-    required String title,
-    required String description,
-    required IconData icon,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context);
-        Navigator.of(context).pushNamed(
-          '/login',
-          arguments: {'role': role},
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFF2E7D32), width: 2),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2E7D32).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: const Color(0xFF2E7D32), size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
           ],
         ),
       ),

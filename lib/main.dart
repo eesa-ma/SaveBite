@@ -6,6 +6,7 @@ import 'package:save_bite/screens/entry_screen.dart'; // Import the EntryScreen
 import 'package:save_bite/screens/owner_dashboard.dart';
 import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
+import 'package:save_bite/screens/profile_screen.dart';
 
 void main() async {
   // Firebase initialization
@@ -33,6 +34,7 @@ class MyApp extends StatelessWidget {
         '/entry': (context) => const EntryScreen(),
         '/owner': (context) => const OwnerDashboard(),
         '/admin': (context) => const AdminDashboard(),
+        '/profile': (context) => const ProfileScreen(),
       },
     );
   }

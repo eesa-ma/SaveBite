@@ -6,7 +6,7 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Sign Up
-  Future<User?> signUp(String email, String password, String name, String role) async {
+  Future<User?> signUp(String email, String password, String name, String role, {String? phone}) async {
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -18,6 +18,7 @@ class AuthService {
         'uid': credential.user!.uid,
         'name': name,
         'email': email,
+        'phone': phone ?? '',
         'role': role,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),

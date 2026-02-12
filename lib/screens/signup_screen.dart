@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -12,35 +13,14 @@ class _SignupScreenState extends State<SignupScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
   String _selectedRole = 'User';
   bool _isLoading = false;
-  bool _isLogin = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is Map && args['role'] is String) {
-      _selectedRole = _normalizeRole(args['role'] as String);
-    }
-  }
-
-  String _normalizeRole(String role) {
-    switch (role.toLowerCase()) {
-      case 'restaurant':
-        return 'Restaurant';
-      case 'admin':
-        return 'Admin';
-      case 'customer':
-      case 'user':
-      default:
-        return 'User';
-    }
-  }
+  bool _isLogin = true;
 
   void _submitAuth() async {
     if (_emailController.text.trim().isEmpty) {
@@ -69,18 +49,34 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
+      String userRole = _selectedRole;
+      
       if (_isLogin) {
         await _authService.login(
           _emailController.text.trim(),
           _passwordController.text,
         );
+        
+        // Fetch user role from Firestore after login
+        final user = _authService.getCurrentUser();
+        if (user != null) {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          if (doc.exists) {
+            userRole = doc.data()?['role'] ?? 'User';
+          }
+        }
       } else {
         await _authService.signUp(
           _emailController.text.trim(),
           _passwordController.text,
           _nameController.text.trim(),
           _selectedRole,
+          phone: _phoneController.text.trim(),
         );
+        userRole = _selectedRole;
       }
 
       if (!mounted) return;
@@ -90,12 +86,12 @@ class _SignupScreenState extends State<SignupScreen> {
 
       _showSnackbar(
         _isLogin
-            ? 'Login successful as $_selectedRole!'
-            : 'Account created successfully as $_selectedRole!',
+            ? 'Login successful as $userRole!'
+            : 'Account created successfully as $userRole!',
         const Color(0xFF2E7D32),
       );
 
-      final route = _routeForRole(_selectedRole);
+      final route = _routeForRole(userRole);
       Navigator.of(context).pushNamedAndRemoveUntil(route, (r) => false);
     } catch (e) {
       if (mounted) {
@@ -135,6 +131,7 @@ class _SignupScreenState extends State<SignupScreen> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -181,6 +178,17 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: 'Phone Number',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   TextField(
@@ -221,32 +229,38 @@ class _SignupScreenState extends State<SignupScreen> {
                         const SizedBox(height: 20),
                       ],
                     ),
-                  DropdownButtonFormField<String>(
-                    value: _selectedRole,
-                    decoration: InputDecoration(
-                      labelText: 'Select Role',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                  if (!_isLogin)
+                    Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: _selectedRole,
+                          decoration: InputDecoration(
+                            labelText: 'Select Role',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'User', child: Text('User')),
+                            DropdownMenuItem(
+                              value: 'Restaurant',
+                              child: Text('Restaurant Owner'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'Admin',
+                              child: Text('Admin'),
+                            ),
+                          ],
+                          onChanged: (String? newValue) {
+                            setState(() {
+                              _selectedRole = newValue!;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'User', child: Text('User')),
-                      DropdownMenuItem(
-                        value: 'Restaurant',
-                        child: Text('Restaurant'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Admin',
-                        child: Text('Admin'),
-                      ),
-                    ],
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        _selectedRole = newValue!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
