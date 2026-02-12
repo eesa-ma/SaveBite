@@ -7,6 +7,7 @@ import 'package:save_bite/screens/owner_dashboard.dart';
 import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
+import 'package:save_bite/screens/profile_sync_screen.dart';
 
 void main() async {
   // Firebase initialization
@@ -35,6 +36,7 @@ class MyApp extends StatelessWidget {
         '/owner': (context) => const OwnerDashboard(),
         '/admin': (context) => const AdminDashboard(),
         '/profile': (context) => const ProfileScreen(),
+        '/profile-sync': (context) => const ProfileSyncScreen(),
       },
     );
   }

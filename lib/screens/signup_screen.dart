@@ -52,20 +52,38 @@ class _SignupScreenState extends State<SignupScreen> {
       String userRole = _selectedRole;
       
       if (_isLogin) {
-        await _authService.login(
+        final user = await _authService.login(
           _emailController.text.trim(),
           _passwordController.text,
         );
         
-        // Fetch user role from Firestore after login
-        final user = _authService.getCurrentUser();
+        // Check if user exists in Firestore
         if (user != null) {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-          if (doc.exists) {
-            userRole = doc.data()?['role'] ?? 'User';
+          final exists = await _authService.userExistsInFirestore(user.uid);
+          
+          if (!exists) {
+            // User exists in Auth but not in Firestore, redirect to sync screen
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+            });
+            
+            _showSnackbar(
+              'Please complete your profile',
+              Colors.orange,
+            );
+            
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              '/profile-sync',
+              (r) => false,
+            );
+            return;
+          }
+          
+          // User exists in Firestore, get their role
+          final userData = await _authService.getUserData(user.uid);
+          if (userData != null && userData['role'] != null) {
+            userRole = userData['role'];
           }
         }
       } else {
