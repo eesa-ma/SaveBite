@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_serivce.dart';
+import '../utils/theme_manager.dart';
 
 class OwnerDashboard extends StatelessWidget {
   const OwnerDashboard({super.key});
@@ -1227,8 +1228,14 @@ class _SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<_SettingsDialog> {
   bool _notificationsEnabled = true;
-  bool _darkModeEnabled = false;
+  late bool _darkModeEnabled;
   String _selectedLanguage = 'English';
+
+  @override
+  void initState() {
+    super.initState();
+    _darkModeEnabled = ThemeManager.isDarkMode;
+  }
 
   void _showLanguageSelector() {
     showDialog(
@@ -1417,6 +1424,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               setState(() {
                 _darkModeEnabled = value;
               });
+              ThemeManager.toggleTheme(value);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
