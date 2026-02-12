@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 
 class Restaurant {
@@ -23,6 +24,21 @@ class Restaurant {
     required this.isOpen,
     required this.deliveryTime,
   });
+
+  factory Restaurant.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    return Restaurant(
+      id: doc.id,
+      name: data['name'] ?? 'Unknown Restaurant',
+      cuisine: data['cuisine'] ?? 'General',
+      rating: (data['rating'] ?? 0).toDouble(),
+      reviews: data['reviews'] ?? 0,
+      distance: data['distance'] ?? 'N/A',
+      imageUrl: data['imageUrl'] ?? 'https://via.placeholder.com/300x200?text=Restaurant',
+      isOpen: data['isOpen'] ?? true,
+      deliveryTime: data['deliveryTime'] ?? 'N/A',
+    );
+  }
 }
 
 class EntryScreen extends StatefulWidget {
@@ -34,14 +50,42 @@ class EntryScreen extends StatefulWidget {
 
 class _EntryScreenState extends State<EntryScreen> {
   final AuthService _authService = AuthService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController searchController = TextEditingController();
   final FocusNode searchFocusNode = FocusNode();
   String selectedFilter = 'All';
+  List<Restaurant> restaurants = [];
+  bool isLoadingRestaurants = true;
 
-  // User profile data
-  String userName = 'John Doe';
-  String userPhone = '+91 9876543210';
-  String userEmail = 'johndoe@example.com';
+  @override
+  void initState() {
+    super.initState();
+    _loadRestaurants();
+  }
+
+  Future<void> _loadRestaurants() async {
+    try {
+      final snapshot = await _firestore.collection('restaurants').get();
+      setState(() {
+        restaurants = snapshot.docs
+            .map((doc) => Restaurant.fromFirestore(doc))
+            .toList();
+        isLoadingRestaurants = false;
+      });
+    } catch (e) {
+      setState(() {
+        isLoadingRestaurants = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading restaurants: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   final List<Map<String, String>> categories = [
     {'name': 'Pizzas', 'image': 'https://via.placeholder.com/80x80?text=Pizzas'},
@@ -49,75 +93,6 @@ class _EntryScreenState extends State<EntryScreen> {
     {'name': 'Shawarma', 'image': 'https://via.placeholder.com/80x80?text=Shawarma'},
     {'name': 'Cakes', 'image': 'https://via.placeholder.com/80x80?text=Cakes'},
     {'name': 'Idli', 'image': 'https://via.placeholder.com/80x80?text=Idli'},
-  ];
-
-  final List<Restaurant> restaurants = [
-    Restaurant(
-      id: '1',
-      name: 'The Gourmet Burger',
-      cuisine: 'American',
-      rating: 4.8,
-      reviews: 342,
-      distance: '0.5 km',
-      imageUrl: 'https://via.placeholder.com/300x200?text=Burger+Restaurant',
-      isOpen: true,
-      deliveryTime: '20-30 min',
-    ),
-    Restaurant(
-      id: '2',
-      name: 'Pizza Palace',
-      cuisine: 'Italian',
-      rating: 4.6,
-      reviews: 521,
-      distance: '1.2 km',
-      imageUrl: 'https://via.placeholder.com/300x200?text=Pizza+Restaurant',
-      isOpen: true,
-      deliveryTime: '25-35 min',
-    ),
-    Restaurant(
-      id: '3',
-      name: 'Spice Garden',
-      cuisine: 'Indian',
-      rating: 4.7,
-      reviews: 289,
-      distance: '2.1 km',
-      imageUrl: 'https://via.placeholder.com/300x200?text=Indian+Restaurant',
-      isOpen: true,
-      deliveryTime: '30-40 min',
-    ),
-    Restaurant(
-      id: '4',
-      name: 'Sushi Paradise',
-      cuisine: 'Japanese',
-      rating: 4.9,
-      reviews: 456,
-      distance: '1.8 km',
-      imageUrl: 'https://via.placeholder.com/300x200?text=Sushi+Restaurant',
-      isOpen: true,
-      deliveryTime: '35-45 min',
-    ),
-    Restaurant(
-      id: '5',
-      name: 'Taco Fiesta',
-      cuisine: 'Mexican',
-      rating: 4.5,
-      reviews: 198,
-      distance: '0.8 km',
-      imageUrl: 'https://via.placeholder.com/300x200?text=Taco+Restaurant',
-      isOpen: true,
-      deliveryTime: '15-25 min',
-    ),
-    Restaurant(
-      id: '6',
-      name: 'Wok Express',
-      cuisine: 'Chinese',
-      rating: 4.4,
-      reviews: 267,
-      distance: '1.5 km',
-      imageUrl: 'https://via.placeholder.com/300x200?text=Chinese+Restaurant',
-      isOpen: false,
-      deliveryTime: '40-50 min',
-    ),
   ];
 
   List<Restaurant> getFilteredRestaurants() {
@@ -516,35 +491,46 @@ class _EntryScreenState extends State<EntryScreen> {
             // Restaurants List
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Builder(
-                builder: (context) {
-                  final filteredRestaurants = getFilteredRestaurants();
-                  if (filteredRestaurants.isEmpty) {
-                    return Column(
-                      children: [
-                        Icon(Icons.restaurant_menu, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No restaurants found',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
+              child: isLoadingRestaurants
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32.0),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF2E7D32),
                         ),
-                      ],
-                    );
-                  }
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredRestaurants.length,
-                    itemBuilder: (context, index) {
-                      return _buildRestaurantCard(filteredRestaurants[index]);
-                    },
-                  );
-                },
-              ),
+                      ),
+                    )
+                  : Builder(
+                      builder: (context) {
+                        final filteredRestaurants = getFilteredRestaurants();
+                        if (filteredRestaurants.isEmpty) {
+                          return Column(
+                            children: [
+                              Icon(Icons.restaurant_menu, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                restaurants.isEmpty 
+                                    ? 'No restaurants available'
+                                    : 'No restaurants found',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: filteredRestaurants.length,
+                          itemBuilder: (context, index) {
+                            return _buildRestaurantCard(filteredRestaurants[index]);
+                          },
+                        );
+                      },
+                    ),
             ),
 
             const SizedBox(height: 24),
