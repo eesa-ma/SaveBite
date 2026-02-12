@@ -119,7 +119,7 @@ class _SignupScreenState extends State<SignupScreen> {
   String _routeForRole(String role) {
     switch (role) {
       case 'Restaurant':
-        return '/restaurant';
+        return '/restaurant-dashboard';
       case 'Admin':
         return '/admin';
       case 'User':
