@@ -9,7 +9,7 @@ class OwnerDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Restaurant Dashboard'),
         backgroundColor: const Color(0xFF2E7D32),
@@ -306,7 +306,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
           margin: const EdgeInsets.symmetric(horizontal: 16),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -322,12 +322,12 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Menu Items',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1B1B1B),
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -453,10 +453,11 @@ class _MenuItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAvailable 
@@ -505,7 +506,7 @@ class _MenuItemCard extends StatelessWidget {
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: item.isAvailable 
-                        ? const Color(0xFF1B1B1B)
+                        ? Theme.of(context).textTheme.bodyLarge?.color
                         : Colors.grey[600],
                     ),
                   ),
@@ -562,13 +563,13 @@ class _MenuItemCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
+                      color: isDark ? Colors.grey[800] : Colors.grey[100],
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       Icons.edit_outlined,
                       size: 18,
-                      color: Colors.grey[700],
+                      color: isDark ? Colors.grey[300] : Colors.grey[700],
                     ),
                   ),
                 ),
