@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
+import 'package:save_bite/screens/restaurant_details_screen.dart';
 
 class Restaurant {
   final String id;
@@ -622,8 +623,13 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget _buildRestaurantCard(Restaurant restaurant) {
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Opening ${restaurant.name}...')),
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => RestaurantDetailsScreen(
+              restaurantId: restaurant.id,
+              restaurantName: restaurant.name,
+            ),
+          ),
         );
       },
       child: Card(
@@ -798,7 +804,18 @@ class _EntryScreenState extends State<EntryScreen> {
                         ],
                       ),
                       ElevatedButton(
-                        onPressed: restaurant.isOpen ? () {} : null,
+                        onPressed: restaurant.isOpen
+                            ? () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => RestaurantDetailsScreen(
+                                      restaurantId: restaurant.id,
+                                      restaurantName: restaurant.name,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2E7D32),
                           padding: const EdgeInsets.symmetric(
