@@ -1164,7 +1164,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 //   }
 // }
 
-
 //test code
 
 // Restaurant Header Widget (Image 1 Style)
@@ -1189,7 +1188,7 @@ class _RestaurantHeader extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       decoration: BoxDecoration(
-        color: const Color(0xFF4CAF50), 
+        color: const Color(0xFF4CAF50),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -1210,13 +1209,13 @@ class _RestaurantHeader extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.restaurant, 
+              Icons.restaurant,
               color: Color(0xFF4CAF50),
               size: 30,
             ),
           ),
           const SizedBox(width: 16),
-          
+
           // Restaurant Info
           Expanded(
             child: Column(
@@ -1242,7 +1241,7 @@ class _RestaurantHeader extends StatelessWidget {
               ],
             ),
           ),
-          
+
           const SizedBox(width: 8),
 
           // Toggle Section (Label + Switch)
@@ -1279,12 +1278,6 @@ class _RestaurantHeader extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
 
 class _RestaurantSwitcher extends StatelessWidget {
   const _RestaurantSwitcher({
@@ -1345,7 +1338,9 @@ class _RestaurantSwitcher extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          selected.name,
+                          selected.name.isNotEmpty
+                              ? selected.name
+                              : 'Restaurant',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1356,7 +1351,9 @@ class _RestaurantSwitcher extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          selected.address,
+                          selected.address.isNotEmpty
+                              ? selected.address
+                              : 'Address',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1367,31 +1364,35 @@ class _RestaurantSwitcher extends StatelessWidget {
                       ],
                     ),
                   ),
-                  InkWell(
-                    onTap: () => onChanged(selectedId),
-                    borderRadius: BorderRadius.circular(16),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: selectedId,
-                        onChanged: onChanged,
-                        isDense: true,
-                        icon: const Icon(Icons.keyboard_arrow_down, size: 24),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        selectedItemBuilder: (context) => restaurants
-                            .map((_) => const SizedBox.shrink())
-                            .toList(),
-                        items: restaurants
-                            .map(
-                              (restaurant) => DropdownMenuItem<String>(
-                                value: restaurant.id,
-                                child: Text(restaurant.name),
-                              ),
-                            )
-                            .toList(),
+                  PopupMenuButton<String>(
+                    onSelected: (value) => onChanged(value),
+                    tooltip: 'Select restaurant',
+                    constraints: const BoxConstraints(
+                      minWidth: 220,
+                      maxWidth: 280,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    itemBuilder: (context) => restaurants
+                        .map(
+                          (restaurant) => PopupMenuItem<String>(
+                            value: restaurant.id,
+                            child: Text(
+                              restaurant.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    child: const SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 24,
+                        color: Colors.black87,
                       ),
                     ),
                   ),

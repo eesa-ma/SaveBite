@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
+import 'package:save_bite/screens/restaurant_details_screen.dart';
 
 class Restaurant {
   final String id;
@@ -152,33 +153,49 @@ class _EntryScreenState extends State<EntryScreen> {
                       color: Color(0xFF2E7D32),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      final user = _authService.getCurrentUser();
-                      if (user != null) {
-                        Navigator.of(context).pushNamed('/profile');
-                      } else {
-                        Navigator.of(context).pushNamed('/login');
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF2E7D32),
-                          width: 2,
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          Navigator.of(context).pushNamed('/reservations');
+                        },
+                        icon: const Icon(
+                          Icons.receipt_long,
+                          color: Color(0xFF2E7D32),
+                          size: 26,
+                        ),
+                        tooltip: 'My Reservations',
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          final user = _authService.getCurrentUser();
+                          if (user != null) {
+                            Navigator.of(context).pushNamed('/profile');
+                          } else {
+                            Navigator.of(context).pushNamed('/login');
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF2E7D32),
+                              width: 2,
+                            ),
+                          ),
+                          child: const CircleAvatar(
+                            backgroundColor: Color(0xFF2E7D32),
+                            radius: 24,
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
                         ),
                       ),
-                      child: const CircleAvatar(
-                        backgroundColor: Color(0xFF2E7D32),
-                        radius: 24,
-                        child: Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -622,8 +639,13 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget _buildRestaurantCard(Restaurant restaurant) {
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Opening ${restaurant.name}...')),
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => RestaurantDetailsScreen(
+              restaurantId: restaurant.id,
+              restaurantName: restaurant.name,
+            ),
+          ),
         );
       },
       child: Card(
@@ -798,7 +820,18 @@ class _EntryScreenState extends State<EntryScreen> {
                         ],
                       ),
                       ElevatedButton(
-                        onPressed: restaurant.isOpen ? () {} : null,
+                        onPressed: restaurant.isOpen
+                            ? () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => RestaurantDetailsScreen(
+                                      restaurantId: restaurant.id,
+                                      restaurantName: restaurant.name,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2E7D32),
                           padding: const EdgeInsets.symmetric(
