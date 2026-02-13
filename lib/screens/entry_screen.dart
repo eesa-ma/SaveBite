@@ -34,7 +34,9 @@ class Restaurant {
       rating: (data['rating'] ?? 0).toDouble(),
       reviews: data['reviews'] ?? 0,
       distance: data['distance'] ?? 'N/A',
-      imageUrl: data['imageUrl'] ?? 'https://via.placeholder.com/300x200?text=Restaurant',
+      imageUrl:
+          data['imageUrl'] ??
+          'https://via.placeholder.com/300x200?text=Restaurant',
       isOpen: data['isOpen'] ?? true,
       deliveryTime: data['deliveryTime'] ?? 'N/A',
     );
@@ -88,9 +90,15 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   final List<Map<String, String>> categories = [
-    {'name': 'Pizzas', 'image': 'https://via.placeholder.com/80x80?text=Pizzas'},
+    {
+      'name': 'Pizzas',
+      'image': 'https://via.placeholder.com/80x80?text=Pizzas',
+    },
     {'name': 'Dosa', 'image': 'https://via.placeholder.com/80x80?text=Dosa'},
-    {'name': 'Shawarma', 'image': 'https://via.placeholder.com/80x80?text=Shawarma'},
+    {
+      'name': 'Shawarma',
+      'image': 'https://via.placeholder.com/80x80?text=Shawarma',
+    },
     {'name': 'Cakes', 'image': 'https://via.placeholder.com/80x80?text=Cakes'},
     {'name': 'Idli', 'image': 'https://via.placeholder.com/80x80?text=Idli'},
   ];
@@ -99,15 +107,16 @@ class _EntryScreenState extends State<EntryScreen> {
     List<Restaurant> filtered = restaurants;
 
     if (selectedFilter != 'All') {
-      filtered = filtered
-          .where((r) => r.cuisine == selectedFilter)
-          .toList();
+      filtered = filtered.where((r) => r.cuisine == selectedFilter).toList();
     }
 
     if (searchController.text.isNotEmpty) {
       filtered = filtered
-          .where((r) =>
-              r.name.toLowerCase().contains(searchController.text.toLowerCase()))
+          .where(
+            (r) => r.name.toLowerCase().contains(
+              searchController.text.toLowerCase(),
+            ),
+          )
           .toList();
     }
 
@@ -125,7 +134,13 @@ class _EntryScreenState extends State<EntryScreen> {
             // Header with App Name and Profile Button
             Container(
               color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              //padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.only(
+                left: 16.0, // horizontal start
+                top: 40.0, // vertical start
+                right: 20.0, // custom right padding
+                bottom: 8.0, // custom bottom padding
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -194,7 +209,11 @@ class _EntryScreenState extends State<EntryScreen> {
                       color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.mic, color: Colors.red.shade600, size: 20),
+                    child: Icon(
+                      Icons.mic,
+                      color: Colors.red.shade600,
+                      size: 20,
+                    ),
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -206,13 +225,16 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[100],
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
 
             const SizedBox(height: 16),
-/* 
+            /* 
             // Scan a Heart Promotional Banner
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -440,9 +462,7 @@ class _EntryScreenState extends State<EntryScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  Expanded(
-                    child: _buildActionButton(Icons.tune, 'Filter'),
-                  ),
+                  Expanded(child: _buildActionButton(Icons.tune, 'Filter')),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _buildActionButton(Icons.arrow_downward, 'Sort by'),
@@ -506,10 +526,14 @@ class _EntryScreenState extends State<EntryScreen> {
                         if (filteredRestaurants.isEmpty) {
                           return Column(
                             children: [
-                              Icon(Icons.restaurant_menu, size: 64, color: Colors.grey[400]),
+                              Icon(
+                                Icons.restaurant_menu,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
                               const SizedBox(height: 16),
                               Text(
-                                restaurants.isEmpty 
+                                restaurants.isEmpty
                                     ? 'No restaurants available'
                                     : 'No restaurants found',
                                 style: TextStyle(
@@ -526,7 +550,9 @@ class _EntryScreenState extends State<EntryScreen> {
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: filteredRestaurants.length,
                           itemBuilder: (context, index) {
-                            return _buildRestaurantCard(filteredRestaurants[index]);
+                            return _buildRestaurantCard(
+                              filteredRestaurants[index],
+                            );
                           },
                         );
                       },
@@ -543,9 +569,9 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget _buildActionButton(IconData icon, String label) {
     return OutlinedButton(
       onPressed: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label tapped')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$label tapped')));
       },
       style: OutlinedButton.styleFrom(
         side: BorderSide(color: Colors.grey[300]!),
@@ -611,7 +637,9 @@ class _EntryScreenState extends State<EntryScreen> {
             Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
                   child: Image.network(
                     restaurant.imageUrl,
                     height: 200,
@@ -631,7 +659,10 @@ class _EntryScreenState extends State<EntryScreen> {
                   top: 12,
                   right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: restaurant.isOpen ? Colors.green : Colors.red,
                       borderRadius: BorderRadius.circular(20),
@@ -651,7 +682,10 @@ class _EntryScreenState extends State<EntryScreen> {
                   bottom: 12,
                   left: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black87,
                       borderRadius: BorderRadius.circular(8),
@@ -703,10 +737,7 @@ class _EntryScreenState extends State<EntryScreen> {
                           ),
                         ],
                       ),
-                      Icon(
-                        Icons.favorite_border,
-                        color: Colors.grey[400],
-                      ),
+                      Icon(Icons.favorite_border, color: Colors.grey[400]),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -728,7 +759,11 @@ class _EntryScreenState extends State<EntryScreen> {
                       ),
                       Row(
                         children: [
-                          Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             restaurant.distance,
@@ -747,7 +782,11 @@ class _EntryScreenState extends State<EntryScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                          Icon(
+                            Icons.schedule,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             restaurant.deliveryTime,
