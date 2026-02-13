@@ -246,7 +246,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: _selectedRole,
+                          initialValue: _selectedRole,
                           decoration: InputDecoration(
                             labelText: 'Select Role',
                             border: OutlineInputBorder(

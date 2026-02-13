@@ -10,7 +10,7 @@ import 'package:save_bite/screens/signup_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
 import 'package:save_bite/screens/profile_sync_screen.dart';
 import 'package:save_bite/utils/theme_manager.dart';
-
+ 
 void main() async {
   // Firebase initialization
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
             ),
             useMaterial3: true,
           ),
-          home: const InitialScreen(), // InitialScreen checks auth and routes appropriately
+          home: const InitialScreen(),
           routes: {
             '/login': (context) => const SignupScreen(),
             '/home': (context) => const HomeScreen(),

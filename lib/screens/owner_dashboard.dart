@@ -1,18 +1,708 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_serivce.dart';
+import '../services/restaurant_service.dart';
 import '../utils/theme_manager.dart';
 
-class OwnerDashboard extends StatelessWidget {
+class OwnerDashboard extends StatefulWidget {
   const OwnerDashboard({super.key});
 
   @override
+  State<OwnerDashboard> createState() => _OwnerDashboardState();
+}
+
+class _OwnerDashboardState extends State<OwnerDashboard> {
+  final RestaurantService _restaurantService = RestaurantService();
+  late final List<_RestaurantSummary> _restaurants;
+  late final Map<String, List<_MenuItem>> _menuByRestaurant;
+  late final Map<String, List<_LiveOrder>> _ordersByRestaurant;
+  late String _selectedRestaurantId;
+  _RestaurantSummary? _selectedRestaurantCache;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _restaurants = [
+      _RestaurantSummary(
+        id: 'r1',
+        name: 'Green Bowl Kitchen',
+        address: 'Sector 21, Chandigarh',
+        isOpen: true,
+      ),
+      _RestaurantSummary(
+        id: 'r2',
+        name: 'Spice Route Bistro',
+        address: 'Phase 5, Mohali',
+        isOpen: true,
+      ),
+      _RestaurantSummary(
+        id: 'r3',
+        name: 'Urban Tandoor',
+        address: 'Sector 34, Chandigarh',
+        isOpen: false,
+      ),
+    ];
+
+    _menuByRestaurant = {
+      'r1': [
+        _MenuItem(
+          id: '1',
+          name: 'Grilled Veggie Burger',
+          description: 'Toasted bun, veggie patty, house sauce',
+          price: 8.99,
+          isAvailable: true,
+          category: 'Main Course',
+          emoji: '🍔',
+          quantity: 18,
+        ),
+        _MenuItem(
+          id: '2',
+          name: 'Caesar Salad Bowl',
+          description: 'Romaine, parmesan, garlic croutons',
+          price: 6.50,
+          isAvailable: true,
+          category: 'Salads',
+          emoji: '🥗',
+          quantity: 24,
+        ),
+        _MenuItem(
+          id: '3',
+          name: 'Margherita Pizza',
+          description: 'Tomato, mozzarella, fresh basil',
+          price: 12.99,
+          isAvailable: false,
+          category: 'Pizza',
+          emoji: '🍕',
+          quantity: 6,
+        ),
+        _MenuItem(
+          id: '4',
+          name: 'Chocolate Brownie',
+          description: 'Fudgy brownie with cocoa drizzle',
+          price: 4.99,
+          isAvailable: true,
+          category: 'Desserts',
+          emoji: '🍰',
+          quantity: 32,
+        ),
+        _MenuItem(
+          id: '5',
+          name: 'Fresh Orange Juice',
+          description: 'Cold-pressed Valencia oranges',
+          price: 3.99,
+          isAvailable: true,
+          category: 'Beverages',
+          emoji: '🧃',
+          quantity: 40,
+        ),
+        _MenuItem(
+          id: '6',
+          name: 'Pasta Alfredo',
+          description: 'Creamy alfredo sauce, herbs',
+          price: 10.99,
+          isAvailable: true,
+          category: 'Pasta',
+          emoji: '🍝',
+          quantity: 14,
+        ),
+        _MenuItem(
+          id: '7',
+          name: 'BBQ Chicken Wings',
+          description: 'Smoky BBQ glaze, house dip',
+          price: 9.99,
+          isAvailable: false,
+          category: 'Appetizers',
+          emoji: '🍗',
+          quantity: 9,
+        ),
+        _MenuItem(
+          id: '8',
+          name: 'Iced Coffee',
+          description: 'Chilled brew with oat milk',
+          price: 4.50,
+          isAvailable: true,
+          category: 'Beverages',
+          emoji: '☕',
+          quantity: 22,
+        ),
+      ],
+      'r2': [
+        _MenuItem(
+          id: '21',
+          name: 'Butter Chicken Bowl',
+          description: 'Creamy tomato gravy, basmati rice',
+          price: 11.50,
+          isAvailable: true,
+          category: 'Signature',
+          emoji: '🍛',
+          quantity: 16,
+        ),
+        _MenuItem(
+          id: '22',
+          name: 'Paneer Tikka Wrap',
+          description: 'Grilled paneer, mint chutney',
+          price: 7.25,
+          isAvailable: true,
+          category: 'Wraps',
+          emoji: '🌯',
+          quantity: 28,
+        ),
+        _MenuItem(
+          id: '23',
+          name: 'Masala Lemonade',
+          description: 'Spiced lemonade with mint',
+          price: 3.25,
+          isAvailable: true,
+          category: 'Beverages',
+          emoji: '🍋',
+          quantity: 35,
+        ),
+      ],
+      'r3': [
+        _MenuItem(
+          id: '31',
+          name: 'Tandoori Platter',
+          description: 'Smoky grill mix, onion salad',
+          price: 14.75,
+          isAvailable: false,
+          category: 'Grill',
+          emoji: '🍢',
+          quantity: 8,
+        ),
+        _MenuItem(
+          id: '32',
+          name: 'Garlic Naan',
+          description: 'Stone-baked naan, garlic butter',
+          price: 2.50,
+          isAvailable: true,
+          category: 'Breads',
+          emoji: '🫓',
+          quantity: 50,
+        ),
+      ],
+    };
+
+    _ordersByRestaurant = {
+      'r1': [
+        _LiveOrder(
+          id: '#1021',
+          items: 4,
+          status: _LiveOrderStatus.newOrder,
+          customerName: 'Aman Singh',
+          customerPhone: '+91 98111 22334',
+          deliveryAddress: 'Sector 21, Chandigarh',
+          placedAt: now.subtract(const Duration(minutes: 6)),
+          lines: [
+            _OrderLine(name: 'Grilled Veggie Burger', quantity: 2, price: 8.99),
+            _OrderLine(name: 'Fresh Orange Juice', quantity: 1, price: 3.99),
+            _OrderLine(name: 'Chocolate Brownie', quantity: 1, price: 4.99),
+          ],
+        ),
+        _LiveOrder(
+          id: '#1020',
+          items: 2,
+          status: _LiveOrderStatus.preparing,
+          customerName: 'Ria Kapoor',
+          customerPhone: '+91 98765 33210',
+          deliveryAddress: 'Phase 3, Mohali',
+          placedAt: now.subtract(const Duration(minutes: 18)),
+          lines: [
+            _OrderLine(name: 'Pasta Alfredo', quantity: 1, price: 10.99),
+            _OrderLine(name: 'Iced Coffee', quantity: 1, price: 4.50),
+          ],
+        ),
+        _LiveOrder(
+          id: '#1019',
+          items: 5,
+          status: _LiveOrderStatus.ready,
+          customerName: 'Kabir Malik',
+          customerPhone: '+91 90012 45555',
+          deliveryAddress: 'Sector 34, Chandigarh',
+          placedAt: now.subtract(const Duration(minutes: 28)),
+          lines: [
+            _OrderLine(name: 'Margherita Pizza', quantity: 1, price: 12.99),
+            _OrderLine(name: 'Caesar Salad Bowl', quantity: 2, price: 6.50),
+            _OrderLine(name: 'Fresh Orange Juice', quantity: 2, price: 3.99),
+          ],
+        ),
+      ],
+      'r2': [
+        _LiveOrder(
+          id: '#2025',
+          items: 3,
+          status: _LiveOrderStatus.preparing,
+          customerName: 'Simran Kaur',
+          customerPhone: '+91 99888 33221',
+          deliveryAddress: 'Phase 5, Mohali',
+          placedAt: now.subtract(const Duration(minutes: 12)),
+          lines: [
+            _OrderLine(name: 'Butter Chicken Bowl', quantity: 1, price: 11.50),
+            _OrderLine(name: 'Paneer Tikka Wrap', quantity: 2, price: 7.25),
+          ],
+        ),
+        _LiveOrder(
+          id: '#2024',
+          items: 1,
+          status: _LiveOrderStatus.newOrder,
+          customerName: 'Neha Jain',
+          customerPhone: '+91 99100 10101',
+          deliveryAddress: 'Sector 44, Chandigarh',
+          placedAt: now.subtract(const Duration(minutes: 3)),
+          lines: [
+            _OrderLine(name: 'Masala Lemonade', quantity: 1, price: 3.25),
+          ],
+        ),
+      ],
+      'r3': [],
+    };
+
+    _selectedRestaurantId = _restaurants.first.id;
+  }
+
+  _RestaurantSummary get _selectedRestaurant =>
+      _restaurants.firstWhere((restaurant) => restaurant.id == _selectedRestaurantId);
+
+  List<_MenuItem> get _selectedMenuItems => _menuByRestaurant[_selectedRestaurantId] ?? [];
+
+  List<_LiveOrder> get _selectedOrders =>
+      (_ordersByRestaurant[_selectedRestaurantId] ?? [])
+          .where((order) => order.status != _LiveOrderStatus.pickedUp)
+          .toList();
+
+  _LiveOrderStatus _statusFromString(String? value) {
+    switch (value) {
+      case 'new':
+        return _LiveOrderStatus.newOrder;
+      case 'preparing':
+        return _LiveOrderStatus.preparing;
+      case 'ready':
+        return _LiveOrderStatus.ready;
+      case 'pickedUp':
+        return _LiveOrderStatus.pickedUp;
+      default:
+        return _LiveOrderStatus.newOrder;
+    }
+  }
+
+  String _statusToString(_LiveOrderStatus status) {
+    switch (status) {
+      case _LiveOrderStatus.newOrder:
+        return 'new';
+      case _LiveOrderStatus.preparing:
+        return 'preparing';
+      case _LiveOrderStatus.ready:
+        return 'ready';
+      case _LiveOrderStatus.pickedUp:
+        return 'pickedUp';
+    }
+  }
+
+  _RestaurantSummary _restaurantFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? {};
+    return _RestaurantSummary(
+      id: doc.id,
+      name: data['name'] ?? 'Restaurant',
+      address: data['address'] ?? 'Address not set',
+      isOpen: data['isOpen'] ?? false,
+    );
+  }
+
+  _MenuItem _menuItemFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? {};
+    final priceValue = data['price'];
+    final quantityValue = data['quantityAvailable'];
+
+    return _MenuItem(
+      id: doc.id,
+      name: data['name'] ?? 'Item',
+      description: data['description'] ?? '',
+      price: (priceValue is num) ? priceValue.toDouble() : 0.0,
+      isAvailable: data['isAvailable'] ?? true,
+      category: data['category'] ?? 'Menu',
+      emoji: data['emoji'] ?? '🍽️',
+      quantity: (quantityValue is num) ? quantityValue.toInt() : 0,
+    );
+  }
+
+  _LiveOrder _orderFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? {};
+    final itemsData = (data['items'] as List<dynamic>?) ?? [];
+    final createdAt = data['createdAt'];
+    final placedAt = createdAt is Timestamp ? createdAt.toDate() : DateTime.now();
+    final lines = itemsData
+        .whereType<Map<String, dynamic>>()
+        .map(
+          (item) => _OrderLine(
+            name: item['name'] ?? 'Item',
+            quantity: (item['quantity'] is num) ? (item['quantity'] as num).toInt() : 1,
+            price: (item['price'] is num) ? (item['price'] as num).toDouble() : 0.0,
+          ),
+        )
+        .toList();
+    final totalItems = lines.fold<int>(0, (total, line) => total + line.quantity);
+
+    return _LiveOrder(
+      id: doc.id,
+      items: totalItems,
+      status: _statusFromString(data['status'] as String?),
+      customerName: data['customerName'] ?? 'Customer',
+      customerPhone: data['customerPhone'] ?? 'N/A',
+      deliveryAddress: data['deliveryAddress'] ?? 'Address not set',
+      placedAt: placedAt,
+      lines: lines,
+    );
+  }
+
+  void _onRestaurantChanged(String? id) {
+    if (id == null) {
+      return;
+    }
+    setState(() {
+      _selectedRestaurantId = id;
+    });
+  }
+
+  void _updateOrderStatus(String orderId, _LiveOrderStatus status) {
+    _restaurantService
+        .updateOrderStatus(orderId, _statusToString(status))
+        .catchError((_) {
+      final orders = _ordersByRestaurant[_selectedRestaurantId];
+      if (orders == null) {
+        return;
+      }
+
+      final index = orders.indexWhere((order) => order.id == orderId);
+      if (index == -1) {
+        return;
+      }
+
+      setState(() {
+        orders[index].status = status;
+      });
+    });
+  }
+
+  void _openOrderDetails(_LiveOrder order) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _OrderDetailsSheet(
+        order: order,
+        onMarkReady: order.status == _LiveOrderStatus.ready
+            ? null
+            : () {
+                _updateOrderStatus(order.id, _LiveOrderStatus.ready);
+                Navigator.pop(context);
+              },
+        onMarkPickedUp: order.status == _LiveOrderStatus.ready
+            ? () {
+                _updateOrderStatus(order.id, _LiveOrderStatus.pickedUp);
+                Navigator.pop(context);
+              }
+            : null,
+      ),
+    );
+  }
+
+  void _openAddItemDialog() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to add items.')),
+      );
+      return;
+    }
+
+    final restaurantId = _selectedRestaurantId;
+    if (restaurantId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a restaurant first.')),
+      );
+      return;
+    }
+
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final priceController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Menu Item'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Food Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Price',
+                  border: OutlineInputBorder(),
+                  prefixText: '₹ ',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Quantity',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              final description = descriptionController.text.trim();
+              final price = double.tryParse(priceController.text) ?? 0.0;
+              final quantity = int.tryParse(quantityController.text) ?? 0;
+
+              if (name.isEmpty || price <= 0 || quantity <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter a name, price, and quantity.'),
+                  ),
+                );
+                return;
+              }
+
+              try {
+                await _restaurantService.addMenuItem(
+                  restaurantId: restaurantId,
+                  name: name,
+                  description: description,
+                  price: price,
+                  quantityAvailable: quantity,
+                );
+                if (!mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Item added successfully!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              } catch (error) {
+                final newItem = _MenuItem(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  name: name,
+                  description: description,
+                  price: price,
+                  isAvailable: true,
+                  category: 'New',
+                  emoji: '🍽️',
+                  quantity: quantity,
+                );
+
+                setState(() {
+                  _menuByRestaurant[restaurantId]?.insert(0, newItem);
+                });
+
+                if (!mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Added locally (offline): $error')),
+                );
+              }
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+            ),
+            child: const Text('Add Item'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openAddRestaurantDialog() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to add restaurants.')),
+      );
+      return;
+    }
+
+    final nameController = TextEditingController();
+    final addressController = TextEditingController();
+    final phoneController = TextEditingController();
+    final emailController = TextEditingController();
+    final hoursController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Restaurant'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Restaurant Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(
+                labelText: 'Address',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: hoursController,
+              decoration: const InputDecoration(
+                labelText: 'Operating Hours',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              final address = addressController.text.trim();
+              final phone = phoneController.text.trim();
+              final email = emailController.text.trim();
+              final hours = hoursController.text.trim();
+
+              if (name.isEmpty || address.isEmpty || phone.isEmpty || email.isEmpty || hours.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Enter name, address, phone, email, and hours.')),
+                );
+                return;
+              }
+
+              try {
+                final doc = await _restaurantService.addRestaurant(
+                  ownerId: user.uid,
+                  name: name,
+                  address: address,
+                  phone: phone,
+                  email: email,
+                  hours: hours,
+                  isOpen: true,
+                );
+                if (!mounted) {
+                  return;
+                }
+                setState(() {
+                  _selectedRestaurantId = doc.id;
+                  _selectedRestaurantCache = null;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Restaurant added.')),
+                );
+              } catch (error) {
+                final newRestaurant = _RestaurantSummary(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  name: name,
+                  address: address,
+                  isOpen: true,
+                );
+
+                setState(() {
+                  _restaurants.insert(0, newRestaurant);
+                  _selectedRestaurantId = newRestaurant.id;
+                });
+
+                if (!mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Added locally (offline): $error')),
+                );
+              }
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+            ),
+            child: const Text('Add Restaurant'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final fallbackRestaurant = _selectedRestaurantCache ?? _selectedRestaurant;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text('Restaurant Dashboard'),
-        backgroundColor: const Color(0xFF2E7D32),
+        title: const Text(
+          'Restaurant Dashboard',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: const Color(0xFF4CAF50),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -31,14 +721,18 @@ class OwnerDashboard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             onSelected: (value) {
-              _handleMenuSelection(context, value);
+              _handleMenuSelection(
+                context,
+                value,
+                restaurant: fallbackRestaurant,
+              );
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'details',
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.store, color: Color(0xFF2E7D32)),
+                  leading: Icon(Icons.store, color: Color(0xFF4CAF50)),
                   title: Text('Restaurant Details'),
                 ),
               ),
@@ -46,7 +740,7 @@ class OwnerDashboard extends StatelessWidget {
                 value: 'profile',
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.person, color: Color(0xFF2E7D32)),
+                  leading: Icon(Icons.person, color: Color(0xFF4CAF50)),
                   title: Text('My Profile'),
                 ),
               ),
@@ -54,7 +748,7 @@ class OwnerDashboard extends StatelessWidget {
                 value: 'settings',
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.settings, color: Color(0xFF2E7D32)),
+                  leading: Icon(Icons.settings, color: Color(0xFF4CAF50)),
                   title: Text('Settings'),
                 ),
               ),
@@ -71,23 +765,250 @@ class OwnerDashboard extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _RestaurantHeader(
-            name: 'Green Bowl Kitchen',
-            address: 'Sector 21, Chandigarh',
-            isOpen: true,
-          ),
-          Expanded(
-            child: _FoodMenuManager(),
+      body: user == null
+          ? _buildCenteredMessage('Please sign in to view your dashboard.')
+          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _restaurantService.streamRestaurants(user.uid),
+              builder: (context, snapshot) {
+                final docs = snapshot.data?.docs ?? [];
+                final hasFirestoreData = docs.isNotEmpty;
+
+                if (snapshot.hasError && !hasFirestoreData) {
+                  return _buildCenteredMessage(
+                    'Unable to load restaurants. ${snapshot.error}',
+                  );
+                }
+                if (snapshot.connectionState == ConnectionState.waiting && !hasFirestoreData) {
+                  return _buildCenteredLoading();
+                }
+
+                final restaurants = hasFirestoreData
+                    ? docs.map(_restaurantFromDoc).toList()
+                    : _restaurants;
+
+                var selectedId = _selectedRestaurantId;
+                final hasSelection =
+                    selectedId.isNotEmpty && restaurants.any((r) => r.id == selectedId);
+                if (!hasSelection) {
+                  selectedId = restaurants.first.id;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _selectedRestaurantId = selectedId;
+                      });
+                    }
+                  });
+                }
+
+                final selected = restaurants.firstWhere((r) => r.id == selectedId);
+                if (_selectedRestaurantCache?.id != selected.id) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _selectedRestaurantCache = selected;
+                        _selectedRestaurantId = selected.id;
+                      });
+                    }
+                  });
+                }
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Column(
+                    children: [
+                      _RestaurantSwitcher(
+                        restaurants: restaurants,
+                        selectedId: selected.id,
+                        onChanged: _onRestaurantChanged,
+                        onAddRestaurant: _openAddRestaurantDialog,
+                      ),
+                      _RestaurantHeader(
+                        restaurantId: selected.id,
+                        name: selected.name,
+                        address: selected.address,
+                        isOpen: selected.isOpen,
+                        onToggleStatus: (isOpen) async {
+                          try {
+                            await _restaurantService.updateRestaurantStatus(selected.id, isOpen);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Restaurant is now ${isOpen ? "Open" : "Closed"}'),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error updating status: $e')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      _buildOrdersSection(selected.id, fallback: !hasFirestoreData),
+                      _buildMenuSection(selected.id, fallback: !hasFirestoreData),
+                    ],
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddItemDialog,
+        backgroundColor: const Color(0xFF4CAF50),
+        elevation: 4,
+        label: const Text(
+          'Add Item',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+        icon: const Icon(Icons.add, size: 22),
+      ),
+    );
+  }
+
+  Widget _buildCenteredLoading() {
+    return const Center(
+      child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+    );
+  }
+
+  Widget _buildCenteredMessage(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrdersSection(String restaurantId, {required bool fallback}) {
+    if (fallback) {
+      return _LiveOrdersBar(
+        orders: _selectedOrders,
+        onOrderTap: _openOrderDetails,
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _restaurantService.streamOrders(restaurantId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _LiveOrdersBar(
+            orders: const [],
+            onOrderTap: _openOrderDetails,
+            isLoading: true,
+          );
+        }
+
+        // Even if there's an error, show the UI with empty orders
+        final orders = snapshot.hasError 
+            ? <_LiveOrder>[]
+            : (snapshot.data?.docs ?? [])
+                .map(_orderFromDoc)
+                .toList();
+
+        return _LiveOrdersBar(
+          orders: orders,
+          onOrderTap: _openOrderDetails,
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuSection(String restaurantId, {required bool fallback}) {
+    if (fallback) {
+      return _FoodMenuManager(
+        menuItems: _selectedMenuItems,
+        onToggleAvailability: (item) async {
+          setState(() {
+            item.isAvailable = !item.isAvailable;
+          });
+        },
+        onUpdateItem: (item, name, description, price, quantity) async {
+          setState(() {
+            item.name = name;
+            item.description = description;
+            item.price = price;
+            item.quantity = quantity;
+            item.isAvailable = quantity > 0;
+          });
+        },
+        onDeleteItem: (item) async {
+          setState(() {
+            _menuByRestaurant[restaurantId]?.removeWhere((entry) => entry.id == item.id);
+          });
+        },
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _restaurantService.streamMenuItems(restaurantId),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _FoodMenuManager(
+            menuItems: const [],
+            onToggleAvailability: (_) async {},
+            onUpdateItem: (item, name, description, price, quantity) async {},
+            onDeleteItem: (_) async {},
+            errorText: 'Unable to load menu items.',
+          );
+        }
+
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final menuItems = (snapshot.data?.docs ?? []).map(_menuItemFromDoc).toList();
+
+        return _FoodMenuManager(
+          menuItems: menuItems,
+          isLoading: isLoading,
+          onToggleAvailability: (item) {
+            return _restaurantService.updateMenuItem(
+              item.id,
+              {'isAvailable': !item.isAvailable},
+            );
+          },
+          onUpdateItem: (item, name, description, price, quantity) {
+            return _restaurantService.updateMenuItem(
+              item.id,
+              {
+                'name': name,
+                'description': description,
+                'price': price,
+                'quantityAvailable': quantity,
+                'isAvailable': quantity > 0,
+              },
+            );
+          },
+          onDeleteItem: (item) {
+            return _restaurantService.deleteMenuItem(item.id);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionMessage(String message) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
-        backgroundColor: const Color(0xFF2E7D32),
-        label: const Text('Add Item'),
-        icon: const Icon(Icons.add),
+      child: Text(
+        message,
+        style: TextStyle(color: Colors.grey[600]),
       ),
     );
   }
@@ -96,25 +1017,29 @@ class OwnerDashboard extends StatelessWidget {
 // Restaurant Header Widget
 class _RestaurantHeader extends StatelessWidget {
   const _RestaurantHeader({
+    required this.restaurantId,
     required this.name,
     required this.address,
     required this.isOpen,
+    required this.onToggleStatus,
   });
 
+  final String restaurantId;
   final String name;
   final String address;
   final bool isOpen;
+  final Function(bool) onToggleStatus;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [
-            const Color(0xFF2E7D32),
-            const Color(0xFF388E3C),
+            Color(0xFF388E3C),
+            Color(0xFF4CAF50),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -122,7 +1047,7 @@ class _RestaurantHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2E7D32).withOpacity(0.3),
+            color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -131,19 +1056,19 @@ class _RestaurantHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
+            width: 70,
+            height: 70,
+            decoration: const BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.restaurant,
-              color: Color(0xFF2E7D32),
-              size: 32,
+              Icons.restaurant_menu,
+              color: Color(0xFF4CAF50),
+              size: 36,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,49 +1076,183 @@ class _RestaurantHeader extends StatelessWidget {
                 Text(
                   name,
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   address,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isOpen ? 'Open' : 'Closed',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Transform.scale(
+                scale: 0.85,
+                child: Switch(
+                  value: isOpen,
+                  onChanged: (value) => onToggleStatus(value),
+                  activeColor: Colors.white,
+                  activeTrackColor: Colors.white.withValues(alpha: 0.5),
+                  inactiveThumbColor: Colors.white,
+                  inactiveTrackColor: Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestaurantSwitcher extends StatelessWidget {
+  const _RestaurantSwitcher({
+    required this.restaurants,
+    required this.selectedId,
+    required this.onChanged,
+    required this.onAddRestaurant,
+  });
+
+  final List<_RestaurantSummary> restaurants;
+  final String selectedId;
+  final ValueChanged<String?> onChanged;
+  final VoidCallback onAddRestaurant;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = restaurants.firstWhere((restaurant) => restaurant.id == selectedId);
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
-              color: isOpen ? Colors.white : Colors.white.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(20),
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: const Icon(Icons.store, color: Color(0xFF4CAF50), size: 28),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isOpen ? const Color(0xFF2E7D32) : Colors.red,
-                    shape: BoxShape.circle,
+                const Text(
+                  'Active',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
                   ),
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  isOpen ? 'Open' : 'Closed',
+                const Text(
+                  'Restaurant',
                   style: TextStyle(
-                    color: isOpen ? const Color(0xFF2E7D32) : Colors.red,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  selected.name,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                Text(
+                  selected.address,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          InkWell(
+            onTap: onAddRestaurant,
+            borderRadius: BorderRadius.circular(25),
+            child: Container(
+              width: 45,
+              height: 45,
+              decoration: BoxDecoration(
+                color: const Color(0xFF4CAF50),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.add,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedId,
+                onChanged: onChanged,
+                isDense: true,
+                borderRadius: BorderRadius.circular(12),
+                icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+                items: restaurants
+                    .map(
+                      (restaurant) => DropdownMenuItem<String>(
+                        value: restaurant.id,
+                        child: Text(restaurant.name),
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
           ),
         ],
@@ -202,186 +1261,755 @@ class _RestaurantHeader extends StatelessWidget {
   }
 }
 
+class _LiveOrdersBar extends StatefulWidget {
+  const _LiveOrdersBar({
+    required this.orders,
+    required this.onOrderTap,
+    this.isLoading = false,
+  });
+
+  final List<_LiveOrder> orders;
+  final ValueChanged<_LiveOrder> onOrderTap;
+  final bool isLoading;
+
+  @override
+  State<_LiveOrdersBar> createState() => _LiveOrdersBarState();
+}
+
+class _LiveOrdersBarState extends State<_LiveOrdersBar> {
+  String _selectedFilter = 'All'; // All, Preparing, Ready, Completed
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.orders.length;
+    final preparingCount = widget.orders
+        .where((order) =>
+            order.status == _LiveOrderStatus.preparing ||
+            order.status == _LiveOrderStatus.newOrder)
+        .length;
+    final readyCount = widget.orders.where((order) => order.status == _LiveOrderStatus.ready).length;
+    final completedCount =
+        widget.orders.where((order) => order.status == _LiveOrderStatus.pickedUp).length;
+
+    // Filter orders based on selection
+    final filteredOrders = _selectedFilter == 'All'
+        ? widget.orders
+        : widget.orders.where((order) {
+            switch (_selectedFilter) {
+              case 'Preparing':
+                return order.status == _LiveOrderStatus.preparing ||
+                       order.status == _LiveOrderStatus.newOrder;
+              case 'Ready':
+                return order.status == _LiveOrderStatus.ready;
+              case 'Completed':
+                return order.status == _LiveOrderStatus.pickedUp;
+              default:
+                return true;
+            }
+          }).toList();
+
+    final shouldScroll = filteredOrders.length > 3;
+
+    Color statusColor(_LiveOrderStatus status) {
+      switch (status) {
+        case _LiveOrderStatus.newOrder:
+          return const Color(0xFF1565C0);
+        case _LiveOrderStatus.preparing:
+          return const Color(0xFFEF6C00);
+        case _LiveOrderStatus.ready:
+          return const Color(0xFF2E7D32);
+        case _LiveOrderStatus.pickedUp:
+          return Colors.grey;
+      }
+    }
+
+    String statusLabel(_LiveOrderStatus status) {
+      switch (status) {
+        case _LiveOrderStatus.newOrder:
+          return 'New';
+        case _LiveOrderStatus.preparing:
+          return 'Preparing';
+        case _LiveOrderStatus.ready:
+          return 'Ready';
+        case _LiveOrderStatus.pickedUp:
+          return 'Picked Up';
+      }
+    }
+
+    Widget buildOrderTile(_LiveOrder order) {
+      return InkWell(
+        onTap: () => widget.onOrderTap(order),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          margin: shouldScroll ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: statusColor(order.status).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  statusLabel(order.status),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor(order.status),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.id,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${order.items} items • ${order.customerName}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Live Orders',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$total active',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (widget.isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+              ),
+            )
+          else ...[
+            // Filter Tabs
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _FilterChip(
+                    label: 'All $total',
+                    isSelected: _selectedFilter == 'All',
+                    onTap: () => setState(() => _selectedFilter = 'All'),
+                  ),
+                  const SizedBox(width: 10),
+                  _FilterChip(
+                    label: 'Preparing $preparingCount',
+                    isSelected: _selectedFilter == 'Preparing',
+                    onTap: () => setState(() => _selectedFilter = 'Preparing'),
+                  ),
+                  const SizedBox(width: 10),
+                  _FilterChip(
+                    label: 'Ready $readyCount',
+                    isSelected: _selectedFilter == 'Ready',
+                    onTap: () => setState(() => _selectedFilter = 'Ready'),
+                  ),
+                  const SizedBox(width: 10),
+                  _FilterChip(
+                    label: 'Comp',
+                    isSelected: _selectedFilter == 'Completed',
+                    onTap: () => setState(() => _selectedFilter = 'Completed'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Orders List
+            if (filteredOrders.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Text(
+                    'No orders yet',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              )
+            else if (shouldScroll)
+              SizedBox(
+                height: 220,
+                child: ListView.separated(
+                  itemCount: filteredOrders.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) => buildOrderTile(filteredOrders[index]),
+                ),
+              )
+            else
+              Column(
+                children: filteredOrders.map(buildOrderTile).toList(),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF4CAF50) : const Color(0xFFE0E0E0),
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFF757575),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
+      ),
+    );
+  }
+}
+
+class _OrderDetailsSheet extends StatelessWidget {
+  const _OrderDetailsSheet({
+    required this.order,
+    required this.onMarkReady,
+    required this.onMarkPickedUp,
+  });
+
+  final _LiveOrder order;
+  final VoidCallback? onMarkReady;
+  final VoidCallback? onMarkPickedUp;
+
+  String _formatElapsed(DateTime placedAt) {
+    final diff = DateTime.now().difference(placedAt);
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} min ago';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours} hr ago';
+    }
+    return '${diff.inDays} day ago';
+  }
+
+  Color _statusColor(_LiveOrderStatus status) {
+    switch (status) {
+      case _LiveOrderStatus.newOrder:
+        return const Color(0xFF1565C0);
+      case _LiveOrderStatus.preparing:
+        return const Color(0xFFEF6C00);
+      case _LiveOrderStatus.ready:
+        return const Color(0xFF2E7D32);
+      case _LiveOrderStatus.pickedUp:
+        return Colors.grey;
+    }
+  }
+
+  String _statusLabel(_LiveOrderStatus status) {
+    switch (status) {
+      case _LiveOrderStatus.newOrder:
+        return 'New Order';
+      case _LiveOrderStatus.preparing:
+        return 'Preparing';
+      case _LiveOrderStatus.ready:
+        return 'Ready';
+      case _LiveOrderStatus.pickedUp:
+        return 'Picked Up';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final subtotal = order.subtotal;
+    final tax = subtotal * 0.05;
+    final total = subtotal + tax;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+          top: 12,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Text(
+                    'Order ${order.id}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _statusColor(order.status).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _statusLabel(order.status),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _statusColor(order.status),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Placed ${_formatElapsed(order.placedAt)}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Customer',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(order.customerName, style: const TextStyle(fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(order.customerPhone, style: TextStyle(color: Colors.grey[600])),
+                    const SizedBox(height: 6),
+                    Text(order.deliveryAddress, style: TextStyle(color: Colors.grey[600])),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Items',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              ...order.lines.map(
+                (line) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${line.quantity}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          line.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Text(
+                        '₹${(line.price * line.quantity).toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                ),
+                child: Column(
+                  children: [
+                    _SummaryRow(label: 'Subtotal', value: '₹${subtotal.toStringAsFixed(0)}'),
+                    const SizedBox(height: 6),
+                    _SummaryRow(label: 'Tax (5%)', value: '₹${tax.toStringAsFixed(0)}'),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
+                    _SummaryRow(
+                      label: 'Total',
+                      value: '₹${total.toStringAsFixed(0)}',
+                      isBold: true,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (onMarkReady != null || onMarkPickedUp != null)
+                Row(
+                  children: [
+                    if (onMarkReady != null)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: onMarkReady,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: Color(0xFF4CAF50)),
+                          ),
+                          child: const Text('Mark Ready'),
+                        ),
+                      ),
+                    if (onMarkReady != null && onMarkPickedUp != null)
+                      const SizedBox(width: 12),
+                    if (onMarkPickedUp != null)
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: onMarkPickedUp,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF4CAF50),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text('Mark Picked Up'),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({required this.label, required this.value, this.isBold = false});
+
+  final String label;
+  final String value;
+  final bool isBold;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+      fontSize: isBold ? 16 : 14,
+    );
+    return Row(
+      children: [
+        Text(label, style: style),
+        const Spacer(),
+        Text(value, style: style),
+      ],
+    );
+  }
+}
+
 // Food Menu Manager Widget
 class _FoodMenuManager extends StatefulWidget {
+  const _FoodMenuManager({
+    required this.menuItems,
+    required this.onToggleAvailability,
+    required this.onUpdateItem,
+    required this.onDeleteItem,
+    this.isLoading = false,
+    this.errorText,
+  });
+
+  final List<_MenuItem> menuItems;
+  final Future<void> Function(_MenuItem item) onToggleAvailability;
+  final Future<void> Function(
+    _MenuItem item,
+    String name,
+    String description,
+    double price,
+    int quantity,
+  ) onUpdateItem;
+  final Future<void> Function(_MenuItem item) onDeleteItem;
+  final bool isLoading;
+  final String? errorText;
+
   @override
   State<_FoodMenuManager> createState() => _FoodMenuManagerState();
 }
 
 class _FoodMenuManagerState extends State<_FoodMenuManager> {
-  final List<_MenuItem> menuItems = [
-    _MenuItem(
-      id: '1',
-      name: 'Grilled Veggie Burger',
-      price: 8.99,
-      isAvailable: true,
-      category: 'Main Course',
-      emoji: '🍔',
-    ),
-    _MenuItem(
-      id: '2',
-      name: 'Caesar Salad Bowl',
-      price: 6.50,
-      isAvailable: true,
-      category: 'Salads',
-      emoji: '🥗',
-    ),
-    _MenuItem(
-      id: '3',
-      name: 'Margherita Pizza',
-      price: 12.99,
-      isAvailable: false,
-      category: 'Pizza',
-      emoji: '🍕',
-    ),
-    _MenuItem(
-      id: '4',
-      name: 'Chocolate Brownie',
-      price: 4.99,
-      isAvailable: true,
-      category: 'Desserts',
-      emoji: '🍰',
-    ),
-    _MenuItem(
-      id: '5',
-      name: 'Fresh Orange Juice',
-      price: 3.99,
-      isAvailable: true,
-      category: 'Beverages',
-      emoji: '🧃',
-    ),
-    _MenuItem(
-      id: '6',
-      name: 'Pasta Alfredo',
-      price: 10.99,
-      isAvailable: true,
-      category: 'Pasta',
-      emoji: '🍝',
-    ),
-    _MenuItem(
-      id: '7',
-      name: 'BBQ Chicken Wings',
-      price: 9.99,
-      isAvailable: false,
-      category: 'Appetizers',
-      emoji: '🍗',
-    ),
-    _MenuItem(
-      id: '8',
-      name: 'Iced Coffee',
-      price: 4.50,
-      isAvailable: true,
-      category: 'Beverages',
-      emoji: '☕',
-    ),
-  ];
-
   void _toggleAvailability(int index) {
-    setState(() {
-      menuItems[index].isAvailable = !menuItems[index].isAvailable;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${menuItems[index].name} marked as ${menuItems[index].isAvailable ? "Available" : "Unavailable"}',
+    final item = widget.menuItems[index];
+    final newAvailability = !item.isAvailable;
+    widget.onToggleAvailability(item).then((_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${item.name} marked as ${newAvailability ? 'Available' : 'Unavailable'}',
+          ),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: newAvailability ? const Color(0xFF4CAF50) : Colors.grey[700],
         ),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: menuItems[index].isAvailable 
-          ? const Color(0xFF2E7D32) 
-          : Colors.grey[700],
+      );
+    }).catchError((error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating item: $error')),
+      );
+    });
+  }
+
+  void _confirmDelete(int index) {
+    final item = widget.menuItems[index];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete item?'),
+        content: Text('Remove "${item.name}" from the menu?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              widget.onDeleteItem(item).then((_) {
+                if (!mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Item deleted.')),
+                );
+              }).catchError((error) {
+                if (!mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error deleting item: $error')),
+                );
+              });
+            },
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final availableCount = menuItems.where((item) => item.isAvailable).length;
+    final availableCount = widget.menuItems.where((item) => item.isAvailable).length;
     
     return Column(
       children: [
-        // Summary Card
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+        // Menu Header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Menu Items',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$availableCount available • ${menuItems.length - availableCount} unavailable',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+              const Text(
+                'Menu Items',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
                 ),
               ),
+              const Spacer(),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2E7D32).withOpacity(0.1),
+                  color: const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${menuItems.length}',
+                  '${widget.menuItems.length}',
                   style: const TextStyle(
-                    fontSize: 24,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF2E7D32),
+                    color: Color(0xFF4CAF50),
                   ),
                 ),
               ),
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text(
+                '$availableCount Available • ${widget.menuItems.length - availableCount} Unavailable',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
-        // Menu Items List
-        Expanded(
-          child: ListView.builder(
+        if (widget.errorText != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            child: Text(
+              widget.errorText!,
+              style: TextStyle(color: Colors.grey[400], fontSize: 15),
+            ),
+          )
+        else if (widget.isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+          )
+        else if (widget.menuItems.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Text(
+                'No menu items yet.',
+                style: TextStyle(color: Colors.grey[400], fontSize: 15),
+              ),
+            ),
+          )
+        else
+          // Menu Items List
+          ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: menuItems.length,
+            itemCount: widget.menuItems.length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (context, index) {
               return _MenuItemCard(
-                item: menuItems[index],
+                item: widget.menuItems[index],
                 onToggle: () => _toggleAvailability(index),
                 onEdit: () => _showEditDialog(index),
+                onDelete: () => _confirmDelete(index),
               );
             },
           ),
-        ),
       ],
     );
   }
 
   void _showEditDialog(int index) {
-    final item = menuItems[index];
+    final item = widget.menuItems[index];
     final nameController = TextEditingController(text: item.name);
+    final descriptionController = TextEditingController(text: item.description);
     final priceController = TextEditingController(text: item.price.toString());
+    final quantityController = TextEditingController(text: item.quantity.toString());
     
     showDialog(
       context: context,
@@ -399,12 +2027,30 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             ),
             const SizedBox(height: 16),
             TextField(
+              controller: descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            TextField(
               controller: priceController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Price (\$)',
+                labelText: 'Price',
                 border: OutlineInputBorder(),
-                prefixText: '\$ ',
+                prefixText: '₹ ',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: quantityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Quantity',
+                border: OutlineInputBorder(),
               ),
             ),
           ],
@@ -416,20 +2062,35 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
           ),
           FilledButton(
             onPressed: () {
-              setState(() {
-                item.name = nameController.text;
-                item.price = double.tryParse(priceController.text) ?? item.price;
+              final name = nameController.text.trim();
+              final description = descriptionController.text.trim();
+              final price = double.tryParse(priceController.text) ?? item.price;
+              final quantity = int.tryParse(quantityController.text) ?? item.quantity;
+
+              widget
+                  .onUpdateItem(item, name, description, price, quantity)
+                  .then((_) {
+                if (!mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Item updated successfully!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }).catchError((error) {
+                if (!mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error updating item: $error')),
+                );
               });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Item updated successfully'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
             },
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
+              backgroundColor: const Color(0xFF4CAF50),
             ),
             child: const Text('Save'),
           ),
@@ -445,36 +2106,39 @@ class _MenuItemCard extends StatelessWidget {
     required this.item,
     required this.onToggle,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final _MenuItem item;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAvailable 
-            ? const Color(0xFF2E7D32).withOpacity(0.2)
-            : Colors.grey.withOpacity(0.2),
-          width: 1.5,
+            ? const Color(0xFF4CAF50).withOpacity(0.3)
+            : Colors.grey.withOpacity(0.3),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             // Food Emoji/Icon
@@ -483,8 +2147,8 @@ class _MenuItemCard extends StatelessWidget {
               height: 56,
               decoration: BoxDecoration(
                 color: item.isAvailable 
-                  ? const Color(0xFF2E7D32).withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.1),
+                  ? const Color(0xFFE8F5E9)
+                  : const Color(0xFFF5F5F5),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -494,7 +2158,7 @@ class _MenuItemCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             // Item Details
             Expanded(
               child: Column(
@@ -503,75 +2167,115 @@ class _MenuItemCard extends StatelessWidget {
                   Text(
                     item.name,
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
                       color: item.isAvailable 
-                        ? Theme.of(context).textTheme.bodyLarge?.color
+                        ? Colors.black87
                         : Colors.grey[600],
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 5),
                   Text(
-                    item.category,
+                    item.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.grey[600],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '\$${item.price.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: item.isAvailable 
-                        ? const Color(0xFF2E7D32)
-                        : Colors.grey[500],
-                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        '₹${item.price.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: item.isAvailable 
+                            ? const Color(0xFF4CAF50)
+                            : Colors.grey[500],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.grey[300]!,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          'Qty: ${item.quantity}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
             // Action Buttons
             Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Availability Switch
                 Transform.scale(
-                  scale: 0.9,
+                  scale: 0.8,
                   child: Switch(
                     value: item.isAvailable,
                     onChanged: (_) => onToggle(),
-                    activeColor: const Color(0xFF2E7D32),
-                    activeTrackColor: const Color(0xFF2E7D32).withOpacity(0.5),
+                    activeColor: const Color(0xFF4CAF50),
+                    activeTrackColor: const Color(0xFF4CAF50).withValues(alpha: 0.4),
+                    inactiveThumbColor: Colors.grey[400],
+                    inactiveTrackColor: Colors.grey[300],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  item.isAvailable ? 'Available' : 'Unavailable',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: item.isAvailable 
-                      ? const Color(0xFF2E7D32)
-                      : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Edit Button
-                InkWell(
-                  onTap: onEdit,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[800] : Colors.grey[100],
+                // Edit & Delete Buttons
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: onEdit,
                       borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.edit_outlined,
+                          size: 18,
+                          color: Colors.grey[700],
+                        ),
+                      ),
                     ),
-                    child: Icon(
-                      Icons.edit_outlined,
-                      size: 18,
-                      color: isDark ? Colors.grey[300] : Colors.grey[700],
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: onDelete,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.red,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -582,30 +2286,88 @@ class _MenuItemCard extends StatelessWidget {
   }
 }
 
+// Restaurant and Order Models
+class _RestaurantSummary {
+  _RestaurantSummary({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.isOpen,
+  });
+
+  final String id;
+  final String name;
+  final String address;
+  final bool isOpen;
+}
+
+enum _LiveOrderStatus { newOrder, preparing, ready, pickedUp }
+
+class _LiveOrder {
+  _LiveOrder({
+    required this.id,
+    required this.items,
+    required this.status,
+    required this.customerName,
+    required this.customerPhone,
+    required this.deliveryAddress,
+    required this.placedAt,
+    required this.lines,
+  });
+
+  final String id;
+  final int items;
+  _LiveOrderStatus status;
+  final String customerName;
+  final String customerPhone;
+  final String deliveryAddress;
+  final DateTime placedAt;
+  final List<_OrderLine> lines;
+
+  double get subtotal =>
+      lines.fold(0.0, (sum, line) => sum + (line.price * line.quantity));
+}
+
+class _OrderLine {
+  _OrderLine({required this.name, required this.quantity, required this.price});
+
+  final String name;
+  final int quantity;
+  final double price;
+}
+
 // Menu Item Model
 class _MenuItem {
   _MenuItem({
     required this.id,
     required this.name,
+    required this.description,
     required this.price,
     required this.isAvailable,
     required this.category,
     required this.emoji,
+    required this.quantity,
   });
 
   final String id;
   String name;
+  String description;
   double price;
   bool isAvailable;
   final String category;
   final String emoji;
+  int quantity;
 }
 
 // Helper Functions
-void _handleMenuSelection(BuildContext context, String value) async {
+void _handleMenuSelection(
+  BuildContext context,
+  String value, {
+  _RestaurantSummary? restaurant,
+}) async {
   switch (value) {
     case 'details':
-      _showRestaurantDetails(context);
+      _showRestaurantDetails(context, restaurant);
       break;
     case 'profile':
       _showProfile(context);
@@ -623,8 +2385,8 @@ void _showNotifications(BuildContext context) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: Row(
-        children: const [
+      title: const Row(
+        children: [
           Icon(Icons.notifications, color: Color(0xFF2E7D32)),
           SizedBox(width: 8),
           Text('Notifications'),
@@ -638,7 +2400,7 @@ void _showNotifications(BuildContext context) {
             _NotificationTile(
               icon: Icons.shopping_bag,
               title: 'New Order #1021',
-              subtitle: '4 items • \$28.50',
+              subtitle: '4 items • ₹28.50',
               time: '2 min ago',
               color: const Color(0xFF2E7D32),
             ),
@@ -676,10 +2438,10 @@ void _showNotifications(BuildContext context) {
   );
 }
 
-void _showRestaurantDetails(BuildContext context) {
+void _showRestaurantDetails(BuildContext context, _RestaurantSummary? restaurant) {
   showDialog(
     context: context,
-    builder: (context) => _RestaurantDetailsDialog(),
+    builder: (context) => _RestaurantDetailsDialog(restaurant: restaurant),
   );
 }
 
@@ -701,8 +2463,8 @@ void _handleLogout(BuildContext context) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: Row(
-        children: const [
+      title: const Row(
+        children: [
           Icon(Icons.logout, color: Colors.red),
           SizedBox(width: 8),
           Text('Logout'),
@@ -767,7 +2529,7 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.1),
+        backgroundColor: color.withValues(alpha: 0.1),
         child: Icon(icon, color: color, size: 20),
       ),
       title: Text(
@@ -791,55 +2553,39 @@ class _NotificationTile extends StatelessWidget {
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 // Restaurant Details Dialog
 class _RestaurantDetailsDialog extends StatefulWidget {
+  const _RestaurantDetailsDialog({this.restaurant});
+
+  final _RestaurantSummary? restaurant;
+
   @override
   State<_RestaurantDetailsDialog> createState() => _RestaurantDetailsDialogState();
 }
 
 class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
-  final _nameController = TextEditingController(text: 'Green Bowl Kitchen');
-  final _addressController = TextEditingController(text: 'Sector 21, Chandigarh');
-  final _phoneController = TextEditingController(text: '+91 98765 43210');
-  final _emailController = TextEditingController(text: 'contact@greenbowl.com');
-  final _hoursController = TextEditingController(text: '9:00 AM - 10:00 PM');
+  late final TextEditingController _nameController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _hoursController;
   bool _isEditing = false;
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final restaurant = widget.restaurant;
+    _nameController = TextEditingController(
+      text: restaurant?.name ?? 'Green Bowl Kitchen',
+    );
+    _addressController = TextEditingController(
+      text: restaurant?.address ?? 'Sector 21, Chandigarh',
+    );
+    _phoneController = TextEditingController(text: '+91 98765 43210');
+    _emailController = TextEditingController(text: 'contact@greenbowl.com');
+    _hoursController = TextEditingController(text: '9:00 AM - 10:00 PM');
+  }
 
   @override
   void dispose() {
@@ -868,7 +2614,7 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Restaurant details updated successfully!'),
+          content: Text('Restaurant details updated'),
           backgroundColor: Color(0xFF2E7D32),
         ),
       );
@@ -888,8 +2634,8 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
-        children: const [
+      title: const Row(
+        children: [
           Icon(Icons.store, color: Color(0xFF2E7D32)),
           SizedBox(width: 8),
           Text('Restaurant Details'),
@@ -1065,7 +2811,7 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Profile updated successfully!'),
+            content: Text('Profile updated successfully'),
             backgroundColor: Color(0xFF2E7D32),
           ),
         );
@@ -1095,8 +2841,8 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
     final user = _authService.getCurrentUser();
 
     return AlertDialog(
-      title: Row(
-        children: const [
+      title: const Row(
+        children: [
           Icon(Icons.person, color: Color(0xFF2E7D32)),
           SizedBox(width: 8),
           Text('My Profile'),
@@ -1115,7 +2861,7 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
                   Center(
                     child: CircleAvatar(
                       radius: 40,
-                      backgroundColor: const Color(0xFF2E7D32).withOpacity(0.1),
+                      backgroundColor: const Color(0xFF2E7D32).withValues(alpha: 0.1),
                       child: Text(
                         (_nameController.text.isNotEmpty
                                 ? _nameController.text[0]
@@ -1230,7 +2976,6 @@ class _SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<_SettingsDialog> {
   bool _notificationsEnabled = true;
   late bool _darkModeEnabled;
-  String _selectedLanguage = 'English';
 
   @override
   void initState() {
@@ -1238,147 +2983,84 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     _darkModeEnabled = ThemeManager.isDarkMode;
   }
 
-  void _showLanguageSelector() {
+  void _showHelpSupport(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Language'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioListTile<String>(
-              title: const Text('English'),
-              value: 'English',
-              groupValue: _selectedLanguage,
-              onChanged: (value) {
-                setState(() {
-                  _selectedLanguage = value!;
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Language changed to $_selectedLanguage'),
-                    backgroundColor: const Color(0xFF2E7D32),
-                  ),
-                );
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('हिंदी (Hindi)'),
-              value: 'Hindi',
-              groupValue: _selectedLanguage,
-              onChanged: (value) {
-                setState(() {
-                  _selectedLanguage = value!;
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Language changed to $_selectedLanguage'),
-                    backgroundColor: const Color(0xFF2E7D32),
-                  ),
-                );
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('ਪੰਜਾਬੀ (Punjabi)'),
-              value: 'Punjabi',
-              groupValue: _selectedLanguage,
-              onChanged: (value) {
-                setState(() {
-                  _selectedLanguage = value!;
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Language changed to $_selectedLanguage'),
-                    backgroundColor: const Color(0xFF2E7D32),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showHelpSupport() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: const [
-            Icon(Icons.help, color: Color(0xFF2E7D32)),
-            SizedBox(width: 8),
-            Text('Help & Support'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Need assistance? Contact us:',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.email, color: Color(0xFF2E7D32)),
-              title: const Text('Email'),
-              subtitle: const Text('contact@greenbowl.com'),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Opening email app...'),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.phone, color: Color(0xFF2E7D32)),
-              title: const Text('Phone'),
-              subtitle: const Text('+91 98765 43210'),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Opening phone dialer...'),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.chat, color: Color(0xFF2E7D32)),
-              title: const Text('Live Chat'),
-              subtitle: const Text('Available 9 AM - 6 PM'),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Opening live chat...'),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.help, color: Color(0xFF2E7D32)),
+              SizedBox(width: 8),
+              Text('Help & Support'),
+            ],
           ),
-        ],
-      ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Need assistance? Contact us:',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.email, color: Color(0xFF2E7D32)),
+                title: const Text('Email'),
+                subtitle: const Text('contact@greenbowl.com'),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Opening email app...'),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.phone, color: Color(0xFF2E7D32)),
+                title: const Text('Phone'),
+                subtitle: const Text('+91 98765 43210'),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Opening phone dialer...'),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.chat, color: Color(0xFF2E7D32)),
+                title: const Text('Live Chat'),
+                subtitle: const Text('Available 9 AM - 6 PM'),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Opening live chat...'),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
-        children: const [
+      title: const Row(
+        children: [
           Icon(Icons.settings, color: Color(0xFF2E7D32)),
           SizedBox(width: 8),
           Text('Settings'),
@@ -1407,14 +3089,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 ),
               );
             },
-            activeColor: const Color(0xFF2E7D32),
-          ),
-          ListTile(
-            leading: const Icon(Icons.language, color: Color(0xFF2E7D32)),
-            title: const Text('Language'),
-            subtitle: Text(_selectedLanguage),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _showLanguageSelector,
+            activeThumbColor: const Color(0xFF2E7D32),
           ),
           SwitchListTile(
             secondary: const Icon(Icons.dark_mode, color: Color(0xFF2E7D32)),
@@ -1429,20 +3104,22 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    value ? 'Dark mode enabled' : 'Dark mode disabled',
+                    value 
+                        ? 'Dark mode enabled' 
+                        : 'Dark mode disabled',
                   ),
                   backgroundColor: const Color(0xFF2E7D32),
                 ),
               );
             },
-            activeColor: const Color(0xFF2E7D32),
+            activeThumbColor: const Color(0xFF2E7D32),
           ),
           ListTile(
             leading: const Icon(Icons.help, color: Color(0xFF2E7D32)),
             title: const Text('Help & Support'),
             subtitle: const Text('Get help and contact us'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: _showHelpSupport,
+            onTap: () => _showHelpSupport(context),
           ),
         ],
       ),
