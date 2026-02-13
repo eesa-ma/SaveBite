@@ -9,8 +9,8 @@ import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
 import 'package:save_bite/screens/profile_sync_screen.dart';
-import 'package:save_bite/utils/theme_manager.dart';
- 
+import 'package:save_bite/screens/restaurant_dashboard.dart';
+
 void main() async {
   // Firebase initialization
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,39 +24,23 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: ThemeManager.themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
-        return MaterialApp(
-          title: 'SaveBite',
-          debugShowCheckedModeBanner: false,
-          themeMode: currentMode,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF2E7D32),
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF2E7D32),
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          ),
-          home: const InitialScreen(),
-          routes: {
-            '/login': (context) => const SignupScreen(),
-            '/home': (context) => const HomeScreen(),
-            '/entry': (context) => const EntryScreen(),
-            '/owner': (context) => const OwnerDashboard(),
-            '/restaurant': (context) => const OwnerDashboard(),
-            '/admin': (context) => const AdminDashboard(),
-            '/profile': (context) => const ProfileScreen(),
-            '/profile-sync': (context) => const ProfileSyncScreen(),
-          },
-        );
+    return MaterialApp(
+      title: 'SaveBite',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFF2E7D32)),
+      ),
+      home: const EntryScreen(), // Set EntryScreen as the entry point
+      routes: {
+        '/login': (context) => const SignupScreen(),
+        '/home': (context) => const HomeScreen(),
+        '/entry': (context) => const EntryScreen(),
+        '/owner': (context) => const OwnerDashboard(),
+        '/restaurant': (context) => const OwnerDashboard(),
+        '/restaurant-dashboard': (context) => const RestaurantDashboard(),
+        '/admin': (context) => const AdminDashboard(),
+        '/profile': (context) => const ProfileScreen(),
+        '/profile-sync': (context) => const ProfileSyncScreen(),
       },
     );
   }
