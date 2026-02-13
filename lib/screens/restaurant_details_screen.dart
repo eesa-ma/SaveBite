@@ -18,7 +18,11 @@ class RestaurantDetailsScreen extends StatelessWidget {
 
   static const Color _primaryColor = Color(0xFF2E7D32);
 
-  Future<void> reserveFood(BuildContext context, FoodItem item) async {
+  Future<void> reserveFood(
+    BuildContext context,
+    FoodItem item,
+    int quantity,
+  ) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -28,6 +32,10 @@ class RestaurantDetailsScreen extends StatelessWidget {
     }
 
     if (_reservingIds.value.contains(item.id)) {
+      return;
+    }
+
+    if (quantity <= 0) {
       return;
     }
 
@@ -52,7 +60,11 @@ class RestaurantDetailsScreen extends StatelessWidget {
           throw StateError('Sold out.');
         }
 
-        final newQty = currentQty - 1;
+        if (quantity > currentQty) {
+          throw StateError('Only $currentQty left.');
+        }
+
+        final newQty = currentQty - quantity;
         transaction.update(itemRef, {
           'quantityAvailable': newQty,
           'isAvailable': newQty > 0,
@@ -63,15 +75,16 @@ class RestaurantDetailsScreen extends StatelessWidget {
           'restaurantId': restaurantId,
           'foodItemId': item.id,
           'foodName': item.name,
+          'quantity': quantity,
           'userId': user.uid,
           'status': 'new',
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Reserved ${item.name}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reserved $quantity x ${item.name}')),
+      );
     } on StateError catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -97,6 +110,7 @@ class RestaurantDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     final itemsStream = FirebaseFirestore.instance
         .collection('foodItems')
         .where('restaurantId', isEqualTo: restaurantId)
@@ -137,7 +151,7 @@ class RestaurantDetailsScreen extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             itemCount: items.length,
             itemBuilder: (context, index) {
-              return _buildFoodCard(context, items[index]);
+              return _buildFoodCard(context, items[index], user);
             },
           );
         },
@@ -145,7 +159,7 @@ class RestaurantDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFoodCard(BuildContext context, FoodItem item) {
+  Widget _buildFoodCard(BuildContext context, FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
 
     return Card(
@@ -191,36 +205,101 @@ class RestaurantDetailsScreen extends StatelessWidget {
                   valueListenable: _reservingIds,
                   builder: (context, reservingIds, _) {
                     final isReserving = reservingIds.contains(item.id);
-                    return ElevatedButton(
-                      onPressed: (isSoldOut || isReserving)
-                          ? null
-                          : () => reserveFood(context, item),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryColor,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
+
+                    if (user == null) {
+                      return ElevatedButton(
+                        onPressed: isSoldOut
+                            ? null
+                            : () async {
+                                final quantity = await _showQuantityDialog(
+                                  context,
+                                  item,
+                                );
+                                if (quantity == null) {
+                                  return;
+                                }
+                                await reserveFood(context, item, quantity);
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                        child: Text(
+                          isSoldOut ? 'Sold Out' : 'Reserve',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      child: isReserving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              isSoldOut ? 'Sold Out' : 'Reserve',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      );
+                    }
+
+                    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('orders')
+                          .where('userId', isEqualTo: user.uid)
+                          .where('foodItemId', isEqualTo: item.id)
+                          .where(
+                            'status',
+                            whereIn: ['new', 'preparing', 'ready'],
+                          )
+                          .snapshots(),
+                      builder: (context, orderSnapshot) {
+                        final hasActiveOrder =
+                            orderSnapshot.hasData &&
+                            (orderSnapshot.data?.docs.isNotEmpty ?? false);
+                        return ElevatedButton(
+                          onPressed:
+                              (isSoldOut || isReserving || hasActiveOrder)
+                              ? null
+                              : () async {
+                                  final quantity = await _showQuantityDialog(
+                                    context,
+                                    item,
+                                  );
+                                  if (quantity == null) {
+                                    return;
+                                  }
+                                  await reserveFood(context, item, quantity);
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryColor,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
                             ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: isReserving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  isSoldOut
+                                      ? 'Sold Out'
+                                      : (hasActiveOrder
+                                            ? 'Reserved'
+                                            : 'Reserve'),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -242,6 +321,69 @@ class RestaurantDetailsScreen extends StatelessWidget {
           style: const TextStyle(fontSize: 14),
         ),
       ),
+    );
+  }
+
+  Future<int?> _showQuantityDialog(BuildContext context, FoodItem item) {
+    return showDialog<int>(
+      context: context,
+      builder: (context) {
+        var quantity = 1;
+        final maxQty = item.quantityAvailable;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Reserve ${item.name}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Available: $maxQty'),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        onPressed: quantity > 1
+                            ? () => setState(() => quantity--)
+                            : null,
+                        icon: const Icon(Icons.remove_circle_outline),
+                      ),
+                      Text(
+                        quantity.toString(),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: quantity < maxQty
+                            ? () => setState(() => quantity++)
+                            : null,
+                        icon: const Icon(Icons.add_circle_outline),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: maxQty > 0
+                      ? () => Navigator.pop(context, quantity)
+                      : null,
+                  style: FilledButton.styleFrom(backgroundColor: _primaryColor),
+                  child: Text('Reserve $quantity'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -153,33 +153,49 @@ class _EntryScreenState extends State<EntryScreen> {
                       color: Color(0xFF2E7D32),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      final user = _authService.getCurrentUser();
-                      if (user != null) {
-                        Navigator.of(context).pushNamed('/profile');
-                      } else {
-                        Navigator.of(context).pushNamed('/login');
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF2E7D32),
-                          width: 2,
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          Navigator.of(context).pushNamed('/reservations');
+                        },
+                        icon: const Icon(
+                          Icons.receipt_long,
+                          color: Color(0xFF2E7D32),
+                          size: 26,
+                        ),
+                        tooltip: 'My Reservations',
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          final user = _authService.getCurrentUser();
+                          if (user != null) {
+                            Navigator.of(context).pushNamed('/profile');
+                          } else {
+                            Navigator.of(context).pushNamed('/login');
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF2E7D32),
+                              width: 2,
+                            ),
+                          ),
+                          child: const CircleAvatar(
+                            backgroundColor: Color(0xFF2E7D32),
+                            radius: 24,
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
                         ),
                       ),
-                      child: const CircleAvatar(
-                        backgroundColor: Color(0xFF2E7D32),
-                        radius: 24,
-                        child: Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),

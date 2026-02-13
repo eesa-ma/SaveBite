@@ -9,8 +9,9 @@ import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
 import 'package:save_bite/screens/profile_sync_screen.dart';
+import 'package:save_bite/screens/my_reservations_screen.dart';
 import 'package:save_bite/utils/theme_manager.dart';
- 
+
 void main() async {
   // Firebase initialization
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +56,7 @@ class MyApp extends StatelessWidget {
             '/admin': (context) => const AdminDashboard(),
             '/profile': (context) => const ProfileScreen(),
             '/profile-sync': (context) => const ProfileSyncScreen(),
+            '/reservations': (context) => const MyReservationsScreen(),
           },
         );
       },
