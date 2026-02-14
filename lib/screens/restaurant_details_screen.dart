@@ -88,11 +88,17 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
           // Filter items
           final filteredItems = items
-              .where((item) =>
-                  item.name.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .where(
+                (item) => item.name.toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ),
+              )
               .toList();
 
-          final categories = ['All', ...items.map((i) => i.description).toSet()];
+          final categories = [
+            'All',
+            ...items.map((i) => i.description).toSet(),
+          ];
 
           return Column(
             children: [
@@ -104,8 +110,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               Expanded(
                 child: ListView(
                   children: [
-                    // Restaurant info card
-                    _buildRestaurantInfo(),
                     // Category filter
                     _buildCategoryFilter(categories),
                     // Food items
@@ -156,10 +160,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                   ),
                   const Text(
                     'Serves fresh food daily',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white70,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.white70),
                   ),
                 ],
               ),
@@ -196,43 +197,16 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
-  Widget _buildRestaurantInfo() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _lightGrey,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildInfoItem('⭐', '4.5', 'Rating'),
-            _buildInfoItem('🚚', '30 min', 'Delivery'),
-            _buildInfoItem('💵', '\$50', 'Min Order'),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildInfoItem(String icon, String value, String label) {
     return Column(
       children: [
-        Text(
-          icon,
-          style: const TextStyle(fontSize: 20),
-        ),
+        Text(icon, style: const TextStyle(fontSize: 20)),
         const SizedBox(height: 4),
         Text(
           value,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
         ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: Colors.grey),
-        ),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }
@@ -281,11 +255,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
-  Widget _buildFoodItemCard(
-    BuildContext context,
-    FoodItem item,
-    User? user,
-  ) {
+  Widget _buildFoodItemCard(BuildContext context, FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
 
     return Container(
@@ -378,11 +348,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
-  Widget _buildQuantityCounter(
-    FoodItem item,
-    int quantity,
-    bool isSoldOut,
-  ) {
+  Widget _buildQuantityCounter(FoodItem item, int quantity, bool isSoldOut) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: _primaryColor),
@@ -511,9 +477,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     }
 
     if (_cartItems.value.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cart is empty')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cart is empty')));
       return;
     }
 
@@ -569,7 +535,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             'isAvailable': newQty > 0,
           });
 
-          final orderRef = FirebaseFirestore.instance.collection('orders').doc();
+          final orderRef = FirebaseFirestore.instance
+              .collection('orders')
+              .doc();
           transaction.set(orderRef, {
             'restaurantId': widget.restaurantId,
             'foodItemId': itemId,
@@ -596,10 +564,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       }
     } on StateError catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -667,9 +632,42 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     _setReserving(item.id, true);
 
     try {
+      // Fetch customer name and phone from Firestore users collection
+      String customerName = 'Customer';
+      String customerPhone = 'N/A';
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          final name = userData?['name'];
+          final phone = userData?['phone'];
+          
+          if (name != null && name.toString().isNotEmpty) {
+            customerName = name.toString();
+          } else {
+            // If no name in Firestore, try displayName or email
+            customerName = user.displayName ?? user.email ?? 'Customer';
+          }
+          
+          if (phone != null && phone.toString().isNotEmpty) {
+            customerPhone = phone.toString();
+          }
+        } else {
+          // If user doc doesn't exist, use displayName or email
+          customerName = user.displayName ?? user.email ?? 'Customer';
+        }
+      } catch (e) {
+        // Fall back to displayName or email if Firestore fails
+        customerName = user.displayName ?? user.email ?? 'Customer';
+      }
+
       await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final itemRef =
-            FirebaseFirestore.instance.collection('foodItems').doc(item.id);
+        final itemRef = FirebaseFirestore.instance
+            .collection('foodItems')
+            .doc(item.id);
         final snapshot = await transaction.get(itemRef);
 
         if (!snapshot.exists) {
@@ -694,14 +692,17 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           'isAvailable': newQty > 0,
         });
 
-        final orderRef =
-            FirebaseFirestore.instance.collection('orders').doc();
+        final orderRef = FirebaseFirestore.instance.collection('orders').doc();
         transaction.set(orderRef, {
           'restaurantId': widget.restaurantId,
           'foodItemId': item.id,
           'foodName': item.name,
+          'price': item.price,
           'quantity': quantity,
           'userId': user.uid,
+          'customerName': customerName,
+          'customerPhone': customerPhone,
+          'deliveryAddress': 'Pickup',
           'notes': notes,
           'status': 'new',
           'createdAt': FieldValue.serverTimestamp(),
@@ -758,8 +759,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.restaurant_menu_outlined,
-                size: 64, color: Colors.grey[400]),
+            Icon(
+              Icons.restaurant_menu_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
             const SizedBox(height: 16),
             const Text(
               'No items available right now',

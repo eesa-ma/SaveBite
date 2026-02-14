@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:save_bite/models/food_item.dart';
 
 class CheckoutResult {
-  CheckoutResult({
-    required this.quantity,
-    this.notes,
-  });
+  CheckoutResult({required this.quantity, this.notes});
 
   final int quantity;
   final String? notes;
@@ -81,7 +78,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               children: [
                 Text(
                   widget.item.name,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -194,9 +194,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Row(
       children: [
         IconButton(
-          onPressed: _quantity > 1
-              ? () => setState(() => _quantity--)
-              : null,
+          onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
           icon: const Icon(Icons.remove_circle_outline),
         ),
         Text(

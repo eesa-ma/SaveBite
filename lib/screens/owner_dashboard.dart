@@ -20,6 +20,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   late String _selectedRestaurantId;
   _RestaurantSummary? _selectedRestaurantCache;
 
+  // Cache snapshots to prevent flicker on rebuild
+  final Map<String, QuerySnapshot<Map<String, dynamic>>> _ordersSnapshotCache =
+      {};
+  final Map<String, QuerySnapshot<Map<String, dynamic>>> _menuSnapshotCache =
+      {};
+
   @override
   void initState() {
     super.initState();
@@ -332,25 +338,46 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 
   _LiveOrder _orderFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
-    final itemsData = (data['items'] as List<dynamic>?) ?? [];
     final createdAt = data['createdAt'];
     final placedAt = createdAt is Timestamp
         ? createdAt.toDate()
         : DateTime.now();
-    final lines = itemsData
-        .whereType<Map<String, dynamic>>()
-        .map(
-          (item) => _OrderLine(
-            name: item['name'] ?? 'Item',
-            quantity: (item['quantity'] is num)
-                ? (item['quantity'] as num).toInt()
-                : 1,
-            price: (item['price'] is num)
-                ? (item['price'] as num).toDouble()
-                : 0.0,
-          ),
-        )
-        .toList();
+
+    // Handle both old format (items array) and new format (single food item)
+    List<_OrderLine> lines = [];
+    final itemsData = (data['items'] as List<dynamic>?) ?? [];
+
+    if (itemsData.isNotEmpty) {
+      // Old format with nested items
+      lines = itemsData
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (item) => _OrderLine(
+              name: item['name'] ?? 'Item',
+              quantity: (item['quantity'] is num)
+                  ? (item['quantity'] as num).toInt()
+                  : 1,
+              price: (item['price'] is num)
+                  ? (item['price'] as num).toDouble()
+                  : 0.0,
+            ),
+          )
+          .toList();
+    } else {
+      // New format from checkout (single food item order)
+      final foodName = data['foodName'] ?? 'Item';
+      final quantity = (data['quantity'] is num)
+          ? (data['quantity'] as num).toInt()
+          : 1;
+      final price = (data['price'] is num)
+          ? (data['price'] as num).toDouble()
+          : 0.0;
+
+      if (foodName.isNotEmpty) {
+        lines = [_OrderLine(name: foodName, quantity: quantity, price: price)];
+      }
+    }
+
     final totalItems = lines.fold<int>(
       0,
       (total, line) => total + line.quantity,
@@ -374,6 +401,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     }
     setState(() {
       _selectedRestaurantId = id;
+      // Clear caches when switching restaurants
+      _ordersSnapshotCache.clear();
+      _menuSnapshotCache.clear();
     });
   }
 
@@ -933,9 +963,16 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     }
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      initialData: _ordersSnapshotCache[restaurantId],
       stream: _restaurantService.streamOrders(restaurantId),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        // Cache the snapshot for future rebuilds
+        if (snapshot.hasData) {
+          _ordersSnapshotCache[restaurantId] = snapshot.data!;
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return _LiveOrdersBar(
             orders: const [],
             onOrderTap: _openOrderDetails,
@@ -943,10 +980,25 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           );
         }
 
-        // Even if there's an error, show the UI with empty orders
-        final orders = snapshot.hasError
-            ? <_LiveOrder>[]
-            : (snapshot.data?.docs ?? []).map(_orderFromDoc).toList();
+        if (snapshot.hasError) {
+          debugPrint('Orders stream error: ${snapshot.error}');
+        }
+
+        // Filter and sort orders client-side
+        List<_LiveOrder> orders = [];
+        if (snapshot.hasData && snapshot.data != null) {
+          orders = (snapshot.data!.docs)
+              .map(_orderFromDoc)
+              .where(
+                (order) =>
+                    order.status != _LiveOrderStatus.pickedUp &&
+                    order.lines.isNotEmpty,
+              ) // Only show orders with items
+              .toList();
+
+          // Sort by recency
+          orders.sort((a, b) => b.placedAt.compareTo(a.placedAt));
+        }
 
         return _LiveOrdersBar(orders: orders, onOrderTap: _openOrderDetails);
       },
@@ -982,9 +1034,15 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     }
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      initialData: _menuSnapshotCache[restaurantId],
       stream: _restaurantService.streamMenuItems(restaurantId),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
+        // Cache the snapshot for future rebuilds
+        if (snapshot.hasData) {
+          _menuSnapshotCache[restaurantId] = snapshot.data!;
+        }
+
+        if (snapshot.hasError && !snapshot.hasData) {
           return _FoodMenuManager(
             menuItems: const [],
             onToggleAvailability: (_) async {},
@@ -994,7 +1052,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           );
         }
 
-        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final isLoading =
+            snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData;
         final menuItems = (snapshot.data?.docs ?? [])
             .map(_menuItemFromDoc)
             .toList();
@@ -1045,128 +1105,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 }
 
 // Restaurant Header Widget
-// class _RestaurantHeader extends StatelessWidget {
-//   const _RestaurantHeader({
-//     required this.restaurantId,
-//     required this.name,
-//     required this.address,
-//     required this.isOpen,
-//     required this.onToggleStatus,
-//   });
-
-//   final String restaurantId;
-//   final String name;
-//   final String address;
-//   final bool isOpen;
-//   final Function(bool) onToggleStatus;
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-//       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-//       decoration: BoxDecoration(
-//         color: const Color(0xFF2E7D32),
-//         borderRadius: BorderRadius.circular(20),
-//         boxShadow: [
-//           BoxShadow(
-//             color: Colors.black.withValues(alpha: 0.2),
-//             blurRadius: 10,
-//             offset: const Offset(0, 6),
-//           ),
-//         ],
-//       ),
-//       child: Row(
-//         children: [
-//          Container(
-//             width: 64,
-//             height: 64,
-//             decoration: const BoxDecoration(
-//               color: Color(0xFF3E8E41),
-//               borderRadius: BorderRadius.all(Radius.circular(18)),
-//             ),
-//             child: const Icon(
-//               Icons.restaurant_menu,
-//               color: Colors.white,
-//               size: 32,
-//             ),
-//           ),
-//           const SizedBox(width: 14),
-//           Expanded(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   name,
-//                   style: const TextStyle(
-//                     fontSize: 20,
-//                     fontWeight: FontWeight.bold,
-//                     color: Colors.white,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 4),
-//                 Text(
-//                   address,
-//                   style: const TextStyle(
-//                     color: Color(0xFFE7F3E7),
-//                     fontSize: 14,
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//           const SizedBox(width: 10),
-//           Container(
-//             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-//             decoration: BoxDecoration(
-//               color: Colors.white,
-//               borderRadius: BorderRadius.circular(20),
-//             ),
-//             child: Row(
-//               mainAxisSize: MainAxisSize.min,
-//               children: [
-//                 Container(
-//                   width: 8,
-//                   height: 8,
-//                   decoration: BoxDecoration(
-//                     color: isOpen ? const Color(0xFF2E7D32) : Colors.grey,
-//                     shape: BoxShape.circle,
-//                   ),
-//                 ),
-//                 const SizedBox(width: 8),
-//                 Text(
-//                   isOpen ? 'Open' : 'Closed',
-//                   style: const TextStyle(
-//                     color: Color(0xFF2E7D32),
-//                     fontWeight: FontWeight.w600,
-//                     fontSize: 13,
-//                   ),
-//                 ),
-//                 const SizedBox(width: 6),
-//                 SizedBox(
-//                   height: 22,
-//                   child: Switch(
-//                     value: isOpen,
-//                     onChanged: (value) => onToggleStatus(value),
-//                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-//                     activeThumbColor: const Color(0xFF2E7D32),
-//                     activeTrackColor: const Color(0xFFB7D7B8),
-//                     inactiveThumbColor: Colors.grey,
-//                     inactiveTrackColor: const Color(0xFFE0E0E0),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-//test code
-
-// Restaurant Header Widget (Image 1 Style)
 class _RestaurantHeader extends StatelessWidget {
   const _RestaurantHeader({
     required this.restaurantId,
@@ -1515,6 +1453,17 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
     }
 
     Widget buildOrderTile(_LiveOrder order) {
+      // Format order ID for display
+      final displayId = '#${order.id.substring(0, 8).toUpperCase()}';
+
+      // Create food items preview
+      final itemsPreview = order.lines
+          .map(
+            (line) =>
+                '${line.name}${line.quantity > 1 ? ' (x${line.quantity})' : ''}',
+          )
+          .join(', ');
+
       return InkWell(
         onTap: () => widget.onOrderTap(order),
         borderRadius: BorderRadius.circular(14),
@@ -1554,7 +1503,7 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      order.id,
+                      displayId,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -1562,8 +1511,21 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${order.items} items • ${order.customerName}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      itemsPreview.isEmpty ? 'No items' : itemsPreview,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      order.customerName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1779,8 +1741,7 @@ class _OrderDetailsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtotal = order.subtotal;
-    final tax = subtotal * 0.05;
-    final total = subtotal + tax;
+    final total = subtotal;
 
     return SafeArea(
       top: false,
@@ -1855,23 +1816,26 @@ class _OrderDetailsSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Customer',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      'Customer Details',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Text(
-                      order.customerName,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      order.customerPhone,
-                      style: TextStyle(color: Colors.grey[600]),
+                      'Name: ${order.customerName}',
+                      style: const TextStyle(fontSize: 13),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      order.deliveryAddress,
-                      style: TextStyle(color: Colors.grey[600]),
+                      'Phone: ${order.customerPhone}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Pickup: ${order.deliveryAddress}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                     ),
                   ],
                 ),
@@ -1938,18 +1902,6 @@ class _OrderDetailsSheet extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _SummaryRow(
-                      label: 'Subtotal',
-                      value: '₹${subtotal.toStringAsFixed(0)}',
-                    ),
-                    const SizedBox(height: 6),
-                    _SummaryRow(
-                      label: 'Tax (5%)',
-                      value: '₹${tax.toStringAsFixed(0)}',
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(height: 1),
-                    const SizedBox(height: 8),
                     _SummaryRow(
                       label: 'Total',
                       value: '₹${total.toStringAsFixed(0)}',
