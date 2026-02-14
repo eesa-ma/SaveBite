@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class RestaurantService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> streamRestaurants(String ownerId) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamRestaurants(
+    String ownerId,
+  ) {
     return _firestore
         .collection('restaurants')
         .where('ownerId', isEqualTo: ownerId)
@@ -32,7 +34,9 @@ class RestaurantService {
     });
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> streamMenuItems(String restaurantId) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamMenuItems(
+    String restaurantId,
+  ) {
     return _firestore
         .collection('foodItems')
         .where('restaurantId', isEqualTo: restaurantId)
@@ -40,12 +44,12 @@ class RestaurantService {
         .snapshots();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> streamOrders(String restaurantId) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamOrders(
+    String restaurantId,
+  ) {
     return _firestore
         .collection('orders')
         .where('restaurantId', isEqualTo: restaurantId)
-        .where('status', whereIn: ['new', 'preparing', 'ready', 'pickedUp'])
-        .orderBy('createdAt', descending: true)
         .snapshots();
   }
 

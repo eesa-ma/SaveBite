@@ -632,6 +632,38 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     _setReserving(item.id, true);
 
     try {
+      // Fetch customer name and phone from Firestore users collection
+      String customerName = 'Customer';
+      String customerPhone = 'N/A';
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          final name = userData?['name'];
+          final phone = userData?['phone'];
+          
+          if (name != null && name.toString().isNotEmpty) {
+            customerName = name.toString();
+          } else {
+            // If no name in Firestore, try displayName or email
+            customerName = user.displayName ?? user.email ?? 'Customer';
+          }
+          
+          if (phone != null && phone.toString().isNotEmpty) {
+            customerPhone = phone.toString();
+          }
+        } else {
+          // If user doc doesn't exist, use displayName or email
+          customerName = user.displayName ?? user.email ?? 'Customer';
+        }
+      } catch (e) {
+        // Fall back to displayName or email if Firestore fails
+        customerName = user.displayName ?? user.email ?? 'Customer';
+      }
+
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final itemRef = FirebaseFirestore.instance
             .collection('foodItems')
@@ -668,6 +700,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           'price': item.price,
           'quantity': quantity,
           'userId': user.uid,
+          'customerName': customerName,
+          'customerPhone': customerPhone,
+          'deliveryAddress': 'Pickup',
           'notes': notes,
           'status': 'new',
           'createdAt': FieldValue.serverTimestamp(),

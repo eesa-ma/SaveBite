@@ -7,18 +7,27 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Sign Up
-  Future<User?> signUp(String email, String password, String name, String role, {String? phone}) async {
+  Future<User?> signUp(
+    String email,
+    String password,
+    String name,
+    String role, {
+    String? phone,
+  }) async {
     UserCredential? credential;
-    
+
     try {
       // Create user in Firebase Authentication
       credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       // Save user profile to Firestore
       if (credential.user != null) {
+        // Set display name on Fire base User object
+        await credential.user!.updateProfile(displayName: name);
+
         await _firestore.collection('users').doc(credential.user!.uid).set({
           'uid': credential.user!.uid,
           'name': name,
@@ -29,7 +38,7 @@ class AuthService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
-      
+
       return credential.user;
     } catch (e) {
       // If Firestore write failed but auth user was created, delete the auth user
@@ -39,7 +48,9 @@ class AuthService {
           await credential!.user!.delete();
         } catch (deleteError) {
           // Log delete error but throw the original error
-          debugPrint('Failed to delete user after Firestore error: $deleteError');
+          debugPrint(
+            'Failed to delete user after Firestore error: $deleteError',
+          );
         }
       }
       // Re-throw the original error
