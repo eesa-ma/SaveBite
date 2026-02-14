@@ -461,12 +461,52 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            onPressed: () {
-              _showNotifications(context);
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('orders')
+                .where('restaurantId', isEqualTo: _selectedRestaurantId)
+                .where('status', isEqualTo: 'new')
+                .snapshots(),
+            builder: (context, snapshot) {
+              final count = snapshot.data?.docs.length ?? 0;
+              
+              return Stack(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      _showNotifications(context, _selectedRestaurantId);
+                    },
+                    icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notifications',
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          count > 99 ? '99+' : count.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
             },
-            icon: const Icon(Icons.notifications_outlined),
-            tooltip: 'Notifications',
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -775,18 +815,17 @@ class _RestaurantHeader extends StatefulWidget {
 }
 
 class _RestaurantHeaderState extends State<_RestaurantHeader> {
-  Future<Map<String, dynamic>> _fetchRevenueData() async {
-    try {
-      final ordersSnapshot = await FirebaseFirestore.instance
-          .collection('orders')
-          .where('restaurantId', isEqualTo: widget.restaurantId)
-          .where('status', whereIn: ['pickedUp', 'cancelled'])
-          .get();
-
+  Stream<Map<String, dynamic>> _getRevenueStream() {
+    return FirebaseFirestore.instance
+        .collection('orders')
+        .where('restaurantId', isEqualTo: widget.restaurantId)
+        .where('status', whereIn: ['pickedUp', 'cancelled'])
+        .snapshots()
+        .map((snapshot) {
       double totalRevenue = 0;
       int totalOrders = 0;
 
-      for (final doc in ordersSnapshot.docs) {
+      for (final doc in snapshot.docs) {
         if (doc['status'] == 'pickedUp') {
           final price = (doc['price'] as num?)?.toDouble() ?? 0;
           final quantity = (doc['quantity'] as num?)?.toInt() ?? 1;
@@ -796,9 +835,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
       }
 
       return {'revenue': totalRevenue, 'orders': totalOrders};
-    } catch (e) {
-      return {'revenue': 0.0, 'orders': 0};
-    }
+    });
   }
 
   @override
@@ -899,8 +936,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
           ),
           const SizedBox(height: 16),
           // Revenue stats row
-          FutureBuilder<Map<String, dynamic>>(
-            future: _fetchRevenueData(),
+          StreamBuilder<Map<String, dynamic>>(
+            stream: _getRevenueStream(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const SizedBox(
@@ -2333,7 +2370,7 @@ void _handleMenuSelection(
   }
 }
 
-void _showNotifications(BuildContext context) {
+void _showNotifications(BuildContext context, String restaurantId) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
@@ -2346,44 +2383,104 @@ void _showNotifications(BuildContext context) {
       ),
       content: SizedBox(
         width: double.maxFinite,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            _NotificationTile(
-              icon: Icons.shopping_bag,
-              title: 'New Order #1021',
-              subtitle: '4 items • ₹28.50',
-              time: '2 min ago',
-              color: const Color(0xFF2E7D32),
-            ),
-            _NotificationTile(
-              icon: Icons.star,
-              title: 'New Review',
-              subtitle: 'Great food and service!',
-              time: '15 min ago',
-              color: const Color(0xFFF57C00),
-            ),
-            _NotificationTile(
-              icon: Icons.local_offer,
-              title: 'Deal Expiring Soon',
-              subtitle: 'Lunch Special ends in 2 hours',
-              time: '1 hour ago',
-              color: const Color(0xFF6A1B9A),
-            ),
-          ],
+        child: StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('status', isEqualTo: 'new')
+              .orderBy('createdAt', descending: true)
+              .limit(10)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF4CAF50),
+                  ),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text('Error: ${snapshot.error}'),
+                ),
+              );
+            }
+
+            final docs = snapshot.data?.docs ?? [];
+
+            if (docs.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.notifications_none, 
+                          size: 48, color: Colors.grey[300]),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No new orders',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final doc = docs[index];
+                final data = doc.data() as Map<String, dynamic>;
+                final foodName = data['foodName'] ?? 'Item';
+                final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+                final price = (data['price'] as num?)?.toDouble() ?? 0;
+                final total = price * quantity;
+                final createdAt = data['createdAt'] as Timestamp?;
+                final orderId = doc.id;
+
+                String timeAgo = 'Just now';
+                if (createdAt != null) {
+                  final orderTime = createdAt.toDate();
+                  final diff = DateTime.now().difference(orderTime);
+                  if (diff.inMinutes < 1) {
+                    timeAgo = 'Just now';
+                  } else if (diff.inMinutes < 60) {
+                    timeAgo = '${diff.inMinutes} min ago';
+                  } else if (diff.inHours < 24) {
+                    timeAgo = '${diff.inHours}h ago';
+                  } else {
+                    timeAgo = '${diff.inDays}d ago';
+                  }
+                }
+
+                return _NotificationTile(
+                  icon: Icons.shopping_bag,
+                  title: 'New Order #${orderId.substring(0, 8).toUpperCase()}',
+                  subtitle: '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
+                  time: timeAgo,
+                  color: const Color(0xFF2E7D32),
+                );
+              },
+            );
+          },
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF2E7D32),
-          ),
-          child: const Text('View All'),
         ),
       ],
     ),
