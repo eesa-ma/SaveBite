@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:save_bite/models/food_item.dart';
 import 'package:save_bite/screens/checkout_screen.dart';
+import '../services/location_service.dart';
 
 class RestaurantDetailsScreen extends StatefulWidget {
   const RestaurantDetailsScreen({
@@ -494,6 +495,18 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
       final items = itemsSnapshot.docs.map(FoodItem.fromDoc).toList();
 
+      final locationService = LocationService();
+      Map<String, dynamic> userLocation = {
+        'latitude': 0.0,
+        'longitude': 0.0,
+        'address': 'Location not available',
+      };
+      try {
+        userLocation = await locationService.getCurrentLocation();
+      } catch (e) {
+        debugPrint('Failed to get user location: $e');
+      }
+
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         for (final entry in _cartItems.value.entries) {
           final itemId = entry.key;
@@ -546,6 +559,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             'quantity': quantity,
             'userId': user.uid,
             'status': 'new',
+              'userLocation': {
+                'latitude': userLocation['latitude'],
+                'longitude': userLocation['longitude'],
+                'address': userLocation['address'],
+              },
             'createdAt': FieldValue.serverTimestamp(),
           });
         }
@@ -604,7 +622,13 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       return;
     }
 
-    await _reserveFood(context, item, result.quantity, notes: result.notes);
+    await _reserveFood(
+      context,
+      item,
+      result.quantity,
+      notes: result.notes,
+      locationOverride: result.userLocation,
+    );
   }
 
   Future<void> _reserveFood(
@@ -612,6 +636,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     FoodItem item,
     int quantity, {
     String? notes,
+    Map<String, dynamic>? locationOverride,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -664,6 +689,20 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         customerName = user.displayName ?? user.email ?? 'Customer';
       }
 
+      Map<String, dynamic> userLocation = locationOverride ?? {
+        'latitude': 0.0,
+        'longitude': 0.0,
+        'address': 'Location not available',
+      };
+      if (locationOverride == null) {
+        final locationService = LocationService();
+        try {
+          userLocation = await locationService.getCurrentLocation();
+        } catch (e) {
+          debugPrint('Failed to get user location: $e');
+        }
+      }
+
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final itemRef = FirebaseFirestore.instance
             .collection('foodItems')
@@ -705,6 +744,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           'deliveryAddress': 'Pickup',
           'notes': notes,
           'status': 'new',
+          'userLocation': {
+            'latitude': userLocation['latitude'],
+            'longitude': userLocation['longitude'],
+            'address': userLocation['address'],
+          },
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
