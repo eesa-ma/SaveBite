@@ -624,12 +624,14 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               },
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddItemDialog,
+        onPressed: _selectedRestaurantId.isEmpty
+            ? _openAddRestaurantDialog
+            : _openAddItemDialog,
         backgroundColor: const Color(0xFF4CAF50),
         elevation: 4,
-        label: const Text(
-          'Add Item',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        label: Text(
+          _selectedRestaurantId.isEmpty ? 'Add Restaurant' : 'Add Item',
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
         icon: const Icon(Icons.add, size: 22),
       ),
