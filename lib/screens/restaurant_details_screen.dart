@@ -559,11 +559,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             'quantity': quantity,
             'userId': user.uid,
             'status': 'new',
-              'userLocation': {
-                'latitude': userLocation['latitude'],
-                'longitude': userLocation['longitude'],
-                'address': userLocation['address'],
-              },
+            'userLocation': {
+              'latitude': userLocation['latitude'],
+              'longitude': userLocation['longitude'],
+              'address': userLocation['address'],
+            },
             'createdAt': FieldValue.serverTimestamp(),
           });
         }
@@ -689,11 +689,13 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         customerName = user.displayName ?? user.email ?? 'Customer';
       }
 
-      Map<String, dynamic> userLocation = locationOverride ?? {
-        'latitude': 0.0,
-        'longitude': 0.0,
-        'address': 'Location not available',
-      };
+      Map<String, dynamic> userLocation =
+          locationOverride ??
+          {
+            'latitude': 0.0,
+            'longitude': 0.0,
+            'address': 'Location not available',
+          };
       if (locationOverride == null) {
         final locationService = LocationService();
         try {

@@ -86,9 +86,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _pickLocation() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => MapPickerScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => MapPickerScreen()),
     );
 
     if (!mounted) {
@@ -234,7 +232,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         notes: _notesController.text.trim().isEmpty
                             ? null
                             : _notesController.text.trim(),
-                        userLocation: (_locationLat != null && _locationLng != null)
+                        userLocation:
+                            (_locationLat != null && _locationLng != null)
                             ? {
                                 'latitude': _locationLat,
                                 'longitude': _locationLng,

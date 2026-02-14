@@ -53,9 +53,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error getting location: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error getting location: $e')));
         setState(() => isLoading = false);
       }
     }
@@ -76,8 +76,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 .replaceAll(", ,", "");
 
         setState(() {
-          selectedAddress =
-              address.isEmpty ? "Unknown Location" : address;
+          selectedAddress = address.isEmpty ? "Unknown Location" : address;
         });
       }
     } catch (e) {
@@ -183,12 +182,12 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                           },
                           child: const Text("Confirm Location"),
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
               ),
-            )
+            ),
         ],
       ),
     );
