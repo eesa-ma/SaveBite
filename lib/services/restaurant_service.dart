@@ -21,6 +21,8 @@ class RestaurantService {
     required String email,
     required String hours,
     required bool isOpen,
+    required double latitude,
+    required double longitude,
   }) {
     return _firestore.collection('restaurants').add({
       'ownerId': ownerId,
@@ -30,6 +32,8 @@ class RestaurantService {
       'email': email,
       'hours': hours,
       'isOpen': isOpen,
+      'latitude': latitude,
+      'longitude': longitude,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

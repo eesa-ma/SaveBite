@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_serivce.dart';
 import '../services/restaurant_service.dart';
 import '../utils/theme_manager.dart';
+import 'map_picker_screen.dart';
 
 class OwnerDashboard extends StatefulWidget {
   const OwnerDashboard({super.key});
@@ -16,6 +17,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
+  double? _restaurantLatitude;
+  double? _restaurantLongitude;
 
   // Cache snapshots to prevent flicker on rebuild
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _ordersSnapshotCache =
@@ -344,9 +347,29 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             const SizedBox(height: 12),
             TextField(
               controller: addressController,
-              decoration: const InputDecoration(
+              readOnly: true,
+              decoration: InputDecoration(
                 labelText: 'Address',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.location_on, color: Color(0xFF4CAF50)),
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MapPickerScreen(),
+                      ),
+                    );
+
+                    if (result != null) {
+                      setState(() {
+                        _restaurantLatitude = result['latitude'];
+                        _restaurantLongitude = result['longitude'];
+                        addressController.text = result['address'];
+                      });
+                    }
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -394,11 +417,13 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   address.isEmpty ||
                   phone.isEmpty ||
                   email.isEmpty ||
-                  hours.isEmpty) {
+                  hours.isEmpty ||
+                  _restaurantLatitude == null ||
+                  _restaurantLongitude == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
-                      'Enter name, address, phone, email, and hours.',
+                      'Fill all fields including location.',
                     ),
                   ),
                 );
@@ -414,6 +439,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   email: email,
                   hours: hours,
                   isOpen: true,
+                  latitude: _restaurantLatitude!,
+                  longitude: _restaurantLongitude!,
                 );
                 if (!mounted) {
                   return;
