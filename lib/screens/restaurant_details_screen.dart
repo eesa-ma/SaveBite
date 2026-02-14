@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:save_bite/models/food_item.dart';
+import 'package:save_bite/screens/checkout_screen.dart';
 
 class RestaurantDetailsScreen extends StatefulWidget {
   const RestaurantDetailsScreen({
@@ -364,9 +365,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
   Widget _buildAddButton(FoodItem item, bool isSoldOut) {
     return ElevatedButton.icon(
-      onPressed: isSoldOut ? null : () => _addToCart(item),
+      onPressed: isSoldOut ? null : () => _startCheckout(context, item),
       icon: const Icon(Icons.add, size: 16),
-      label: const Text('Add'),
+      label: const Text('Reserve'),
       style: ElevatedButton.styleFrom(
         backgroundColor: _primaryColor,
         foregroundColor: Colors.white,
@@ -620,6 +621,107 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       updated.remove(id);
     }
     _reservingIds.value = updated;
+  }
+
+  Future<void> _startCheckout(BuildContext context, FoodItem item) async {
+    final result = await Navigator.push<CheckoutResult>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CheckoutScreen(
+          item: item,
+          restaurantName: widget.restaurantName,
+          initialQuantity: 1,
+        ),
+      ),
+    );
+
+    if (result == null) {
+      return;
+    }
+
+    await _reserveFood(context, item, result.quantity, notes: result.notes);
+  }
+
+  Future<void> _reserveFood(
+    BuildContext context,
+    FoodItem item,
+    int quantity, {
+    String? notes,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to reserve.')),
+      );
+      return;
+    }
+
+    if (_reservingIds.value.contains(item.id)) {
+      return;
+    }
+
+    if (quantity <= 0) {
+      return;
+    }
+
+    _setReserving(item.id, true);
+
+    try {
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final itemRef =
+            FirebaseFirestore.instance.collection('foodItems').doc(item.id);
+        final snapshot = await transaction.get(itemRef);
+
+        if (!snapshot.exists) {
+          throw StateError('Item no longer exists.');
+        }
+
+        final data = snapshot.data() as Map<String, dynamic>;
+        final quantityValue = data['quantityAvailable'];
+        final currentQty = (quantityValue is num) ? quantityValue.toInt() : 0;
+
+        if (currentQty <= 0) {
+          throw StateError('Sold out.');
+        }
+
+        if (quantity > currentQty) {
+          throw StateError('Only $currentQty left.');
+        }
+
+        final newQty = currentQty - quantity;
+        transaction.update(itemRef, {
+          'quantityAvailable': newQty,
+          'isAvailable': newQty > 0,
+        });
+
+        final orderRef =
+            FirebaseFirestore.instance.collection('orders').doc();
+        transaction.set(orderRef, {
+          'restaurantId': widget.restaurantId,
+          'foodItemId': item.id,
+          'foodName': item.name,
+          'quantity': quantity,
+          'userId': user.uid,
+          'notes': notes,
+          'status': 'new',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reserved $quantity x ${item.name}')),
+      );
+    } on StateError catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Reservation failed: $e')));
+    } finally {
+      _setReserving(item.id, false);
+    }
   }
 
   Widget _buildErrorState() {
