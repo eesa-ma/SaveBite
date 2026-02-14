@@ -1105,7 +1105,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 }
 
 // Restaurant Header Widget
-class _RestaurantHeader extends StatelessWidget {
+class _RestaurantHeader extends StatefulWidget {
   const _RestaurantHeader({
     required this.restaurantId,
     required this.name,
@@ -1119,6 +1119,40 @@ class _RestaurantHeader extends StatelessWidget {
   final String address;
   final bool isOpen;
   final Function(bool) onToggleStatus;
+
+  @override
+  State<_RestaurantHeader> createState() => _RestaurantHeaderState();
+}
+
+class _RestaurantHeaderState extends State<_RestaurantHeader> {
+  Future<Map<String, dynamic>> _fetchRevenueData() async {
+    try {
+      final ordersSnapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('restaurantId', isEqualTo: widget.restaurantId)
+          .where('status', whereIn: ['pickedUp', 'cancelled'])
+          .get();
+
+      double totalRevenue = 0;
+      int totalOrders = 0;
+
+      for (final doc in ordersSnapshot.docs) {
+        if (doc['status'] == 'pickedUp') {
+          final price = (doc['price'] as num?)?.toDouble() ?? 0;
+          final quantity = (doc['quantity'] as num?)?.toInt() ?? 1;
+          totalRevenue += price * quantity;
+          totalOrders++;
+        }
+      }
+
+      return {
+        'revenue': totalRevenue,
+        'orders': totalOrders,
+      };
+    } catch (e) {
+      return {'revenue': 0.0, 'orders': 0};
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1136,82 +1170,206 @@ class _RestaurantHeader extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // White Circle Icon
-          Container(
-            width: 62,
-            height: 62,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.restaurant,
-              color: Color(0xFF4CAF50),
-              size: 30,
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Restaurant Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  address,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Toggle Section (Label + Switch)
-          Column(
-            mainAxisSize: MainAxisSize.min,
+          Row(
             children: [
-              Text(
-                isOpen ? 'Open' : 'Closed',
-                style: const TextStyle(
+              // White Circle Icon
+              Container(
+                width: 62,
+                height: 62,
+                decoration: const BoxDecoration(
                   color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.restaurant,
+                  color: Color(0xFF4CAF50),
+                  size: 30,
                 ),
               ),
-              const SizedBox(height: 4),
-              SizedBox(
-                height: 30,
-                child: Transform.scale(
-                  scale: 0.9,
-                  child: Switch(
-                    value: isOpen,
-                    onChanged: onToggleStatus,
-                    activeColor: Colors.white,
-                    activeTrackColor: Colors.white.withOpacity(0.4),
-                    inactiveThumbColor: Colors.white60,
-                    inactiveTrackColor: Colors.black12,
-                  ),
+              const SizedBox(width: 16),
+
+              // Restaurant Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.name,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.address,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // Toggle Section (Label + Switch)
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.isOpen ? 'Open' : 'Closed',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 30,
+                    child: Transform.scale(
+                      scale: 0.9,
+                      child: Switch(
+                        value: widget.isOpen,
+                        onChanged: widget.onToggleStatus,
+                        activeColor: Colors.white,
+                        activeTrackColor: Colors.white.withOpacity(0.4),
+                        inactiveThumbColor: Colors.white60,
+                        inactiveTrackColor: Colors.black12,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          // Revenue stats row
+          FutureBuilder<Map<String, dynamic>>(
+            future: _fetchRevenueData(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final revenue = snapshot.data?['revenue'] as double? ?? 0;
+              final orders = snapshot.data?['orders'] as int? ?? 0;
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        _showOrderHistory(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total Revenue',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '₹${revenue.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        _showOrderHistory(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Orders (Tap History)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$orders completed',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showOrderHistory(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => _OrderHistorySheet(
+        restaurantId: widget.restaurantId,
+      ),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
     );
   }
@@ -1388,37 +1546,37 @@ class _LiveOrdersBar extends StatefulWidget {
 }
 
 class _LiveOrdersBarState extends State<_LiveOrdersBar> {
-  String _selectedFilter = 'All'; // All, Preparing, Ready, Completed
+  String _selectedFilter = 'All'; // All, Preparing, Ready
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.orders.length;
-    final preparingCount = widget.orders
+    // Only show active orders (exclude picked up)
+    final activeOrders = widget.orders
+        .where((order) => order.status != _LiveOrderStatus.pickedUp)
+        .toList();
+    
+    final total = activeOrders.length;
+    final preparingCount = activeOrders
         .where(
           (order) =>
               order.status == _LiveOrderStatus.preparing ||
               order.status == _LiveOrderStatus.newOrder,
         )
         .length;
-    final readyCount = widget.orders
+    final readyCount = activeOrders
         .where((order) => order.status == _LiveOrderStatus.ready)
-        .length;
-    final completedCount = widget.orders
-        .where((order) => order.status == _LiveOrderStatus.pickedUp)
         .length;
 
     // Filter orders based on selection
     final filteredOrders = _selectedFilter == 'All'
-        ? widget.orders
-        : widget.orders.where((order) {
+        ? activeOrders
+        : activeOrders.where((order) {
             switch (_selectedFilter) {
               case 'Preparing':
                 return order.status == _LiveOrderStatus.preparing ||
                     order.status == _LiveOrderStatus.newOrder;
               case 'Ready':
                 return order.status == _LiveOrderStatus.ready;
-              case 'Completed':
-                return order.status == _LiveOrderStatus.pickedUp;
               default:
                 return true;
             }
@@ -1589,12 +1747,6 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
                     label: 'Ready $readyCount',
                     isSelected: _selectedFilter == 'Ready',
                     onTap: () => setState(() => _selectedFilter = 'Ready'),
-                  ),
-                  const SizedBox(width: 10),
-                  _FilterChip(
-                    label: 'Comp',
-                    isSelected: _selectedFilter == 'Completed',
-                    onTap: () => setState(() => _selectedFilter = 'Completed'),
                   ),
                 ],
               ),
@@ -3292,5 +3444,286 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         ),
       ],
     );
+  }
+}
+
+// Order History Sheet
+class _OrderHistorySheet extends StatefulWidget {
+  const _OrderHistorySheet({required this.restaurantId});
+
+  final String restaurantId;
+
+  @override
+  State<_OrderHistorySheet> createState() => _OrderHistorySheetState();
+}
+
+class _OrderHistorySheetState extends State<_OrderHistorySheet> {
+  String _filterType = 'completed'; // completed, cancelled, all
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Order History',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Filter tabs
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterTab('Completed', 'completed'),
+                          const SizedBox(width: 8),
+                          _buildFilterTab('Cancelled', 'cancelled'),
+                          const SizedBox(width: 8),
+                          _buildFilterTab('All', 'all'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Orders list
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: _getOrdersStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF4CAF50),
+                        ),
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text('Error: ${snapshot.error}'),
+                      );
+                    }
+
+                    final docs = snapshot.data?.docs ?? [];
+
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.history,
+                                size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No orders found',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final status = data['status'] ?? 'unknown';
+                        final foodName = data['foodName'] ?? 'Item';
+                        final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+                        final price = (data['price'] as num?)?.toDouble() ?? 0;
+                        final createdAt = data['createdAt'] as Timestamp?;
+                        final timestamp = createdAt?.toDate() ?? DateTime.now();
+
+                        final statusColor = status == 'cancelled'
+                            ? Colors.red
+                            : Colors.green;
+                        final statusLabel = status == 'cancelled'
+                            ? 'Cancelled'
+                            : 'Completed';
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      foodName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      statusLabel,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: statusColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Qty: $quantity × ₹${price.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  Text(
+                                    'Total: ₹${(price * quantity).toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF4CAF50),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _formatDateTime(timestamp),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterTab(String label, String value) {
+    final isSelected = _filterType == value;
+    return GestureDetector(
+      onTap: () => setState(() => _filterType = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? const Color(0xFF4CAF50) : Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Stream<QuerySnapshot> _getOrdersStream() {
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('orders')
+        .where('restaurantId', isEqualTo: widget.restaurantId);
+
+    // Apply filter
+    if (_filterType == 'completed') {
+      query = query.where('status', isEqualTo: 'pickedUp');
+    } else if (_filterType == 'cancelled') {
+      query = query.where('status', isEqualTo: 'cancelled');
+    } else {
+      // 'all' includes both completed and cancelled
+      query = query.where('status', whereIn: ['pickedUp', 'cancelled']);
+    }
+
+    return query.orderBy('createdAt', descending: true).snapshots();
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
   }
 }
