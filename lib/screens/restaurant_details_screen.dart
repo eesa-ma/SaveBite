@@ -644,14 +644,14 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           final userData = userDoc.data();
           final name = userData?['name'];
           final phone = userData?['phone'];
-          
+
           if (name != null && name.toString().isNotEmpty) {
             customerName = name.toString();
           } else {
             // If no name in Firestore, try displayName or email
             customerName = user.displayName ?? user.email ?? 'Customer';
           }
-          
+
           if (phone != null && phone.toString().isNotEmpty) {
             customerPhone = phone.toString();
           }

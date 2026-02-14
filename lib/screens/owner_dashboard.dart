@@ -14,10 +14,7 @@ class OwnerDashboard extends StatefulWidget {
 
 class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
-  late final List<_RestaurantSummary> _restaurants;
-  late final Map<String, List<_MenuItem>> _menuByRestaurant;
-  late final Map<String, List<_LiveOrder>> _ordersByRestaurant;
-  late String _selectedRestaurantId;
+  String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
 
   // Cache snapshots to prevent flicker on rebuild
@@ -25,259 +22,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       {};
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _menuSnapshotCache =
       {};
-
-  @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _restaurants = [
-      _RestaurantSummary(
-        id: 'r1',
-        name: 'Green Bowl Kitchen',
-        address: 'Sector 21, Chandigarh',
-        isOpen: true,
-      ),
-      _RestaurantSummary(
-        id: 'r2',
-        name: 'Spice Route Bistro',
-        address: 'Phase 5, Mohali',
-        isOpen: true,
-      ),
-      _RestaurantSummary(
-        id: 'r3',
-        name: 'Urban Tandoor',
-        address: 'Sector 34, Chandigarh',
-        isOpen: false,
-      ),
-    ];
-
-    _menuByRestaurant = {
-      'r1': [
-        _MenuItem(
-          id: '1',
-          name: 'Grilled Veggie Burger',
-          description: 'Toasted bun, veggie patty, house sauce',
-          price: 8.99,
-          isAvailable: true,
-          category: 'Main Course',
-          emoji: '🍔',
-          quantity: 18,
-        ),
-        _MenuItem(
-          id: '2',
-          name: 'Caesar Salad Bowl',
-          description: 'Romaine, parmesan, garlic croutons',
-          price: 6.50,
-          isAvailable: true,
-          category: 'Salads',
-          emoji: '🥗',
-          quantity: 24,
-        ),
-        _MenuItem(
-          id: '3',
-          name: 'Margherita Pizza',
-          description: 'Tomato, mozzarella, fresh basil',
-          price: 12.99,
-          isAvailable: false,
-          category: 'Pizza',
-          emoji: '🍕',
-          quantity: 6,
-        ),
-        _MenuItem(
-          id: '4',
-          name: 'Chocolate Brownie',
-          description: 'Fudgy brownie with cocoa drizzle',
-          price: 4.99,
-          isAvailable: true,
-          category: 'Desserts',
-          emoji: '🍰',
-          quantity: 32,
-        ),
-        _MenuItem(
-          id: '5',
-          name: 'Fresh Orange Juice',
-          description: 'Cold-pressed Valencia oranges',
-          price: 3.99,
-          isAvailable: true,
-          category: 'Beverages',
-          emoji: '🧃',
-          quantity: 40,
-        ),
-        _MenuItem(
-          id: '6',
-          name: 'Pasta Alfredo',
-          description: 'Creamy alfredo sauce, herbs',
-          price: 10.99,
-          isAvailable: true,
-          category: 'Pasta',
-          emoji: '🍝',
-          quantity: 14,
-        ),
-        _MenuItem(
-          id: '7',
-          name: 'BBQ Chicken Wings',
-          description: 'Smoky BBQ glaze, house dip',
-          price: 9.99,
-          isAvailable: false,
-          category: 'Appetizers',
-          emoji: '🍗',
-          quantity: 9,
-        ),
-        _MenuItem(
-          id: '8',
-          name: 'Iced Coffee',
-          description: 'Chilled brew with oat milk',
-          price: 4.50,
-          isAvailable: true,
-          category: 'Beverages',
-          emoji: '☕',
-          quantity: 22,
-        ),
-      ],
-      'r2': [
-        _MenuItem(
-          id: '21',
-          name: 'Butter Chicken Bowl',
-          description: 'Creamy tomato gravy, basmati rice',
-          price: 11.50,
-          isAvailable: true,
-          category: 'Signature',
-          emoji: '🍛',
-          quantity: 16,
-        ),
-        _MenuItem(
-          id: '22',
-          name: 'Paneer Tikka Wrap',
-          description: 'Grilled paneer, mint chutney',
-          price: 7.25,
-          isAvailable: true,
-          category: 'Wraps',
-          emoji: '🌯',
-          quantity: 28,
-        ),
-        _MenuItem(
-          id: '23',
-          name: 'Masala Lemonade',
-          description: 'Spiced lemonade with mint',
-          price: 3.25,
-          isAvailable: true,
-          category: 'Beverages',
-          emoji: '🍋',
-          quantity: 35,
-        ),
-      ],
-      'r3': [
-        _MenuItem(
-          id: '31',
-          name: 'Tandoori Platter',
-          description: 'Smoky grill mix, onion salad',
-          price: 14.75,
-          isAvailable: false,
-          category: 'Grill',
-          emoji: '🍢',
-          quantity: 8,
-        ),
-        _MenuItem(
-          id: '32',
-          name: 'Garlic Naan',
-          description: 'Stone-baked naan, garlic butter',
-          price: 2.50,
-          isAvailable: true,
-          category: 'Breads',
-          emoji: '🫓',
-          quantity: 50,
-        ),
-      ],
-    };
-
-    _ordersByRestaurant = {
-      'r1': [
-        _LiveOrder(
-          id: '#1021',
-          items: 4,
-          status: _LiveOrderStatus.newOrder,
-          customerName: 'Aman Singh',
-          customerPhone: '+91 98111 22334',
-          deliveryAddress: 'Sector 21, Chandigarh',
-          placedAt: now.subtract(const Duration(minutes: 6)),
-          lines: [
-            _OrderLine(name: 'Grilled Veggie Burger', quantity: 2, price: 8.99),
-            _OrderLine(name: 'Fresh Orange Juice', quantity: 1, price: 3.99),
-            _OrderLine(name: 'Chocolate Brownie', quantity: 1, price: 4.99),
-          ],
-        ),
-        _LiveOrder(
-          id: '#1020',
-          items: 2,
-          status: _LiveOrderStatus.preparing,
-          customerName: 'Ria Kapoor',
-          customerPhone: '+91 98765 33210',
-          deliveryAddress: 'Phase 3, Mohali',
-          placedAt: now.subtract(const Duration(minutes: 18)),
-          lines: [
-            _OrderLine(name: 'Pasta Alfredo', quantity: 1, price: 10.99),
-            _OrderLine(name: 'Iced Coffee', quantity: 1, price: 4.50),
-          ],
-        ),
-        _LiveOrder(
-          id: '#1019',
-          items: 5,
-          status: _LiveOrderStatus.ready,
-          customerName: 'Kabir Malik',
-          customerPhone: '+91 90012 45555',
-          deliveryAddress: 'Sector 34, Chandigarh',
-          placedAt: now.subtract(const Duration(minutes: 28)),
-          lines: [
-            _OrderLine(name: 'Margherita Pizza', quantity: 1, price: 12.99),
-            _OrderLine(name: 'Caesar Salad Bowl', quantity: 2, price: 6.50),
-            _OrderLine(name: 'Fresh Orange Juice', quantity: 2, price: 3.99),
-          ],
-        ),
-      ],
-      'r2': [
-        _LiveOrder(
-          id: '#2025',
-          items: 3,
-          status: _LiveOrderStatus.preparing,
-          customerName: 'Simran Kaur',
-          customerPhone: '+91 99888 33221',
-          deliveryAddress: 'Phase 5, Mohali',
-          placedAt: now.subtract(const Duration(minutes: 12)),
-          lines: [
-            _OrderLine(name: 'Butter Chicken Bowl', quantity: 1, price: 11.50),
-            _OrderLine(name: 'Paneer Tikka Wrap', quantity: 2, price: 7.25),
-          ],
-        ),
-        _LiveOrder(
-          id: '#2024',
-          items: 1,
-          status: _LiveOrderStatus.newOrder,
-          customerName: 'Neha Jain',
-          customerPhone: '+91 99100 10101',
-          deliveryAddress: 'Sector 44, Chandigarh',
-          placedAt: now.subtract(const Duration(minutes: 3)),
-          lines: [
-            _OrderLine(name: 'Masala Lemonade', quantity: 1, price: 3.25),
-          ],
-        ),
-      ],
-      'r3': [],
-    };
-
-    _selectedRestaurantId = _restaurants.first.id;
-  }
-
-  _RestaurantSummary get _selectedRestaurant => _restaurants.firstWhere(
-    (restaurant) => restaurant.id == _selectedRestaurantId,
-  );
-
-  List<_MenuItem> get _selectedMenuItems =>
-      _menuByRestaurant[_selectedRestaurantId] ?? [];
-
-  List<_LiveOrder> get _selectedOrders =>
-      (_ordersByRestaurant[_selectedRestaurantId] ?? [])
-          .where((order) => order.status != _LiveOrderStatus.pickedUp)
-          .toList();
 
   _LiveOrderStatus _statusFromString(String? value) {
     switch (value) {
@@ -411,19 +155,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     _restaurantService
         .updateOrderStatus(orderId, _statusToString(status))
         .catchError((_) {
-          final orders = _ordersByRestaurant[_selectedRestaurantId];
-          if (orders == null) {
-            return;
-          }
-
-          final index = orders.indexWhere((order) => order.id == orderId);
-          if (index == -1) {
-            return;
-          }
-
-          setState(() {
-            orders[index].status = status;
-          });
+          // Error will be shown in UI via StreamBuilder
         });
   }
 
@@ -561,27 +293,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   ),
                 );
               } catch (error) {
-                final newItem = _MenuItem(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: name,
-                  description: description,
-                  price: price,
-                  isAvailable: true,
-                  category: 'New',
-                  emoji: '🍽️',
-                  quantity: quantity,
-                );
-
-                setState(() {
-                  _menuByRestaurant[restaurantId]?.insert(0, newItem);
-                });
-
                 if (!mounted) {
                   return;
                 }
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Added locally (offline): $error')),
+                  SnackBar(content: Text('Failed to add item: $error')),
                 );
               }
             },
@@ -710,24 +427,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   const SnackBar(content: Text('Restaurant added.')),
                 );
               } catch (error) {
-                final newRestaurant = _RestaurantSummary(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: name,
-                  address: address,
-                  isOpen: true,
-                );
-
-                setState(() {
-                  _restaurants.insert(0, newRestaurant);
-                  _selectedRestaurantId = newRestaurant.id;
-                });
-
                 if (!mounted) {
                   return;
                 }
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Added locally (offline): $error')),
+                  SnackBar(content: Text('Failed to add restaurant: $error')),
                 );
               }
             },
@@ -744,7 +449,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final fallbackRestaurant = _selectedRestaurantCache ?? _selectedRestaurant;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -775,7 +479,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               _handleMenuSelection(
                 context,
                 value,
-                restaurant: fallbackRestaurant,
+                restaurant: _selectedRestaurantCache,
               );
             },
             itemBuilder: (context) => [
@@ -822,21 +526,24 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               stream: _restaurantService.streamRestaurants(user.uid),
               builder: (context, snapshot) {
                 final docs = snapshot.data?.docs ?? [];
-                final hasFirestoreData = docs.isNotEmpty;
 
-                if (snapshot.hasError && !hasFirestoreData) {
+                if (snapshot.hasError) {
                   return _buildCenteredMessage(
                     'Unable to load restaurants. ${snapshot.error}',
                   );
                 }
                 if (snapshot.connectionState == ConnectionState.waiting &&
-                    !hasFirestoreData) {
+                    docs.isEmpty) {
                   return _buildCenteredLoading();
                 }
 
-                final restaurants = hasFirestoreData
-                    ? docs.map(_restaurantFromDoc).toList()
-                    : _restaurants;
+                if (docs.isEmpty) {
+                  return _buildCenteredMessage(
+                    'No restaurants yet.\nTap + to add your first restaurant.',
+                  );
+                }
+
+                final restaurants = docs.map(_restaurantFromDoc).toList();
 
                 var selectedId = _selectedRestaurantId;
                 final hasSelection =
@@ -909,14 +616,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                           }
                         },
                       ),
-                      _buildOrdersSection(
-                        selected.id,
-                        fallback: !hasFirestoreData,
-                      ),
-                      _buildMenuSection(
-                        selected.id,
-                        fallback: !hasFirestoreData,
-                      ),
+                      _buildOrdersSection(selected.id),
+                      _buildMenuSection(selected.id),
                     ],
                   ),
                 );
@@ -954,14 +655,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     );
   }
 
-  Widget _buildOrdersSection(String restaurantId, {required bool fallback}) {
-    if (fallback) {
-      return _LiveOrdersBar(
-        orders: _selectedOrders,
-        onOrderTap: _openOrderDetails,
-      );
-    }
-
+  Widget _buildOrdersSection(String restaurantId) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       initialData: _ordersSnapshotCache[restaurantId],
       stream: _restaurantService.streamOrders(restaurantId),
@@ -1005,34 +699,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     );
   }
 
-  Widget _buildMenuSection(String restaurantId, {required bool fallback}) {
-    if (fallback) {
-      return _FoodMenuManager(
-        menuItems: _selectedMenuItems,
-        onToggleAvailability: (item) async {
-          setState(() {
-            item.isAvailable = !item.isAvailable;
-          });
-        },
-        onUpdateItem: (item, name, description, price, quantity) async {
-          setState(() {
-            item.name = name;
-            item.description = description;
-            item.price = price;
-            item.quantity = quantity;
-            item.isAvailable = quantity > 0;
-          });
-        },
-        onDeleteItem: (item) async {
-          setState(() {
-            _menuByRestaurant[restaurantId]?.removeWhere(
-              (entry) => entry.id == item.id,
-            );
-          });
-        },
-      );
-    }
-
+  Widget _buildMenuSection(String restaurantId) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       initialData: _menuSnapshotCache[restaurantId],
       stream: _restaurantService.streamMenuItems(restaurantId),
@@ -1083,25 +750,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       },
     );
   }
-
-  Widget _buildSectionMessage(String message) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Text(message, style: TextStyle(color: Colors.grey[600])),
-    );
-  }
 }
 
 // Restaurant Header Widget
@@ -1145,10 +793,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         }
       }
 
-      return {
-        'revenue': totalRevenue,
-        'orders': totalOrders,
-      };
+      return {'revenue': totalRevenue, 'orders': totalOrders};
     } catch (e) {
       return {'revenue': 0.0, 'orders': 0};
     }
@@ -1265,8 +910,9 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       ),
                     ],
@@ -1286,7 +932,9 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
@@ -1323,7 +971,9 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
@@ -1364,9 +1014,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
   void _showOrderHistory(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => _OrderHistorySheet(
-        restaurantId: widget.restaurantId,
-      ),
+      builder: (context) =>
+          _OrderHistorySheet(restaurantId: widget.restaurantId),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1554,7 +1203,7 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
     final activeOrders = widget.orders
         .where((order) => order.status != _LiveOrderStatus.pickedUp)
         .toList();
-    
+
     final total = activeOrders.length;
     final preparingCount = activeOrders
         .where(
@@ -1810,32 +1459,6 @@ class _FilterChip extends StatelessWidget {
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             color: isSelected ? Colors.white : const Color(0xFF757575),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: color,
         ),
       ),
     );
@@ -2446,8 +2069,6 @@ class _MenuItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -2895,15 +2516,11 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
   void initState() {
     super.initState();
     final restaurant = widget.restaurant;
-    _nameController = TextEditingController(
-      text: restaurant?.name ?? 'Green Bowl Kitchen',
-    );
-    _addressController = TextEditingController(
-      text: restaurant?.address ?? 'Sector 21, Chandigarh',
-    );
-    _phoneController = TextEditingController(text: '+91 98765 43210');
-    _emailController = TextEditingController(text: 'contact@greenbowl.com');
-    _hoursController = TextEditingController(text: '9:00 AM - 10:00 PM');
+    _nameController = TextEditingController(text: restaurant?.name ?? '');
+    _addressController = TextEditingController(text: restaurant?.address ?? '');
+    _phoneController = TextEditingController(text: '');
+    _emailController = TextEditingController(text: '');
+    _hoursController = TextEditingController(text: '');
   }
 
   @override
@@ -3476,11 +3093,15 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
             children: [
               // Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4CAF50),
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3533,9 +3154,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                     }
 
                     if (snapshot.hasError) {
-                      return Center(
-                        child: Text('Error: ${snapshot.error}'),
-                      );
+                      return Center(child: Text('Error: ${snapshot.error}'));
                     }
 
                     final docs = snapshot.data?.docs ?? [];
@@ -3545,8 +3164,11 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.history,
-                                size: 48, color: Colors.grey[300]),
+                            Icon(
+                              Icons.history,
+                              size: 48,
+                              color: Colors.grey[300],
+                            ),
                             const SizedBox(height: 12),
                             Text(
                               'No orders found',
@@ -3569,7 +3191,8 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                         final data = doc.data() as Map<String, dynamic>;
                         final status = data['status'] ?? 'unknown';
                         final foodName = data['foodName'] ?? 'Item';
-                        final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+                        final quantity =
+                            (data['quantity'] as num?)?.toInt() ?? 1;
                         final price = (data['price'] as num?)?.toDouble() ?? 0;
                         final createdAt = data['createdAt'] as Timestamp?;
                         final timestamp = createdAt?.toDate() ?? DateTime.now();
@@ -3609,7 +3232,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                   ),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: statusColor.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(6),
