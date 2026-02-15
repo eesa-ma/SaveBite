@@ -28,10 +28,73 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       ValueNotifier<Map<String, int>>({});
   String _searchQuery = '';
   String _selectedCategory = 'All';
+  
+  // Location data
+  double? _userLatitude;
+  double? _userLongitude;
+  double? _restaurantLatitude;
+  double? _restaurantLongitude;
+  String? _restaurantAddress;
 
   static const Color _primaryColor = Color(0xFF2E7D32);
   static const Color _lightGrey = Color(0xFFF5F5F5);
   static const Color _mediumGrey = Color(0xFFBDBDBD);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocationData();
+  }
+
+  Future<void> _loadLocationData() async {
+    // Load user location
+    try {
+      final locationService = LocationService();
+      final userLocation = await locationService.getCurrentLocation();
+      setState(() {
+        _userLatitude = userLocation['latitude'];
+        _userLongitude = userLocation['longitude'];
+      });
+    } catch (e) {
+      // Silently fail - will just not show distance
+    }
+
+    // Load restaurant location
+    try {
+      final restaurantDoc = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .doc(widget.restaurantId)
+          .get();
+      
+      if (restaurantDoc.exists) {
+        final data = restaurantDoc.data();
+        setState(() {
+          _restaurantLatitude = data?['latitude'];
+          _restaurantLongitude = data?['longitude'];
+          _restaurantAddress = data?['address'];
+        });
+      }
+    } catch (e) {
+      // Silently fail
+    }
+  }
+
+  String _getDistanceText() {
+    if (_userLatitude != null && 
+        _userLongitude != null && 
+        _restaurantLatitude != null && 
+        _restaurantLongitude != null) {
+      final locationService = LocationService();
+      final distance = locationService.calculateDistance(
+        _userLatitude!,
+        _userLongitude!,
+        _restaurantLatitude!,
+        _restaurantLongitude!,
+      );
+      return locationService.formatDistance(distance);
+    }
+    return '';
+  }
 
   void _addToCart(FoodItem item) {
     final updated = Map<String, int>.from(_cartItems.value);
@@ -137,6 +200,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Widget _buildHeader() {
+    final distanceText = _getDistanceText();
+    final addressText = _restaurantAddress ?? 'Serves fresh food daily';
+    final subtitleText = distanceText.isNotEmpty 
+        ? '$distanceText • $addressText'
+        : addressText;
+
     return Container(
       color: _primaryColor,
       child: SafeArea(
@@ -148,22 +217,25 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.restaurantName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.restaurantName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  const Text(
-                    'Serves fresh food daily',
-                    style: TextStyle(fontSize: 12, color: Colors.white70),
-                  ),
-                ],
+                    Text(
+                      subtitleText,
+                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
