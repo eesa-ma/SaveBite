@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_serivce.dart';
 import '../services/restaurant_service.dart';
 import '../utils/theme_manager.dart';
+import 'map_picker_screen.dart';
 
 class OwnerDashboard extends StatefulWidget {
   const OwnerDashboard({super.key});
@@ -16,6 +17,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
+  double? _restaurantLatitude;
+  double? _restaurantLongitude;
 
   // Cache snapshots to prevent flicker on rebuild
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _ordersSnapshotCache =
@@ -344,9 +347,29 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             const SizedBox(height: 12),
             TextField(
               controller: addressController,
-              decoration: const InputDecoration(
+              readOnly: true,
+              decoration: InputDecoration(
                 labelText: 'Address',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.location_on, color: Color(0xFF4CAF50)),
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MapPickerScreen(),
+                      ),
+                    );
+
+                    if (result != null) {
+                      setState(() {
+                        _restaurantLatitude = result['latitude'];
+                        _restaurantLongitude = result['longitude'];
+                        addressController.text = result['address'];
+                      });
+                    }
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -394,12 +417,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   address.isEmpty ||
                   phone.isEmpty ||
                   email.isEmpty ||
-                  hours.isEmpty) {
+                  hours.isEmpty ||
+                  _restaurantLatitude == null ||
+                  _restaurantLongitude == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text(
-                      'Enter name, address, phone, email, and hours.',
-                    ),
+                    content: Text('Fill all fields including location.'),
                   ),
                 );
                 return;
@@ -414,6 +437,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   email: email,
                   hours: hours,
                   isOpen: true,
+                  latitude: _restaurantLatitude!,
+                  longitude: _restaurantLongitude!,
                 );
                 if (!mounted) {
                   return;
@@ -469,7 +494,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 .snapshots(),
             builder: (context, snapshot) {
               final count = snapshot.data?.docs.length ?? 0;
-              
+
               return Stack(
                 children: [
                   IconButton(
@@ -822,20 +847,20 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         .where('status', whereIn: ['pickedUp', 'cancelled'])
         .snapshots()
         .map((snapshot) {
-      double totalRevenue = 0;
-      int totalOrders = 0;
+          double totalRevenue = 0;
+          int totalOrders = 0;
 
-      for (final doc in snapshot.docs) {
-        if (doc['status'] == 'pickedUp') {
-          final price = (doc['price'] as num?)?.toDouble() ?? 0;
-          final quantity = (doc['quantity'] as num?)?.toInt() ?? 1;
-          totalRevenue += price * quantity;
-          totalOrders++;
-        }
-      }
+          for (final doc in snapshot.docs) {
+            if (doc['status'] == 'pickedUp') {
+              final price = (doc['price'] as num?)?.toDouble() ?? 0;
+              final quantity = (doc['quantity'] as num?)?.toInt() ?? 1;
+              totalRevenue += price * quantity;
+              totalOrders++;
+            }
+          }
 
-      return {'revenue': totalRevenue, 'orders': totalOrders};
-    });
+          return {'revenue': totalRevenue, 'orders': totalOrders};
+        });
   }
 
   @override
@@ -2396,9 +2421,7 @@ void _showNotifications(BuildContext context, String restaurantId) {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF4CAF50),
-                  ),
+                  child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
                 ),
               );
             }
@@ -2421,15 +2444,15 @@ void _showNotifications(BuildContext context, String restaurantId) {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.notifications_none, 
-                          size: 48, color: Colors.grey[300]),
+                      Icon(
+                        Icons.notifications_none,
+                        size: 48,
+                        color: Colors.grey[300],
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         'No new orders',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[500],
-                        ),
+                        style: TextStyle(fontSize: 16, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -2468,7 +2491,8 @@ void _showNotifications(BuildContext context, String restaurantId) {
                 return _NotificationTile(
                   icon: Icons.shopping_bag,
                   title: 'New Order #${orderId.substring(0, 8).toUpperCase()}',
-                  subtitle: '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
+                  subtitle:
+                      '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
                   time: timeAgo,
                   color: const Color(0xFF2E7D32),
                 );

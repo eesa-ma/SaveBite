@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/location_service.dart';
 
 class Restaurant {
   final String id;
@@ -6,10 +7,11 @@ class Restaurant {
   final String cuisine;
   final double rating;
   final int reviews;
-  final String distance;
   final String imageUrl;
   final bool isOpen;
   final String deliveryTime;
+  final double latitude;
+  final double longitude;
 
   Restaurant({
     required this.id,
@@ -17,10 +19,11 @@ class Restaurant {
     required this.cuisine,
     required this.rating,
     required this.reviews,
-    required this.distance,
     required this.imageUrl,
     required this.isOpen,
     required this.deliveryTime,
+    required this.latitude,
+    required this.longitude,
   });
 }
 
@@ -32,6 +35,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final LocationService _locationService = LocationService();
+  double? _userLatitude;
+  double? _userLongitude;
+  bool _locationLoading = true;
+  String? _locationError;
+
   final List<Restaurant> restaurants = [
     Restaurant(
       id: '1',
@@ -39,10 +48,11 @@ class _HomeScreenState extends State<HomeScreen> {
       cuisine: 'American',
       rating: 4.8,
       reviews: 342,
-      distance: '0.5 km',
       imageUrl: 'https://via.placeholder.com/300x200?text=Burger+Restaurant',
       isOpen: true,
       deliveryTime: '20-30 min',
+      latitude: 9.9312,
+      longitude: 76.2673,
     ),
     Restaurant(
       id: '2',
@@ -50,10 +60,11 @@ class _HomeScreenState extends State<HomeScreen> {
       cuisine: 'Italian',
       rating: 4.6,
       reviews: 521,
-      distance: '1.2 km',
       imageUrl: 'https://via.placeholder.com/300x200?text=Pizza+Restaurant',
       isOpen: true,
       deliveryTime: '25-35 min',
+      latitude: 9.9380,
+      longitude: 76.2700,
     ),
     Restaurant(
       id: '3',
@@ -61,10 +72,11 @@ class _HomeScreenState extends State<HomeScreen> {
       cuisine: 'Indian',
       rating: 4.7,
       reviews: 289,
-      distance: '2.1 km',
       imageUrl: 'https://via.placeholder.com/300x200?text=Indian+Restaurant',
       isOpen: true,
       deliveryTime: '30-40 min',
+      latitude: 9.9252,
+      longitude: 76.2550,
     ),
     Restaurant(
       id: '4',
@@ -72,10 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
       cuisine: 'Japanese',
       rating: 4.9,
       reviews: 456,
-      distance: '1.8 km',
       imageUrl: 'https://via.placeholder.com/300x200?text=Sushi+Restaurant',
       isOpen: true,
       deliveryTime: '35-45 min',
+      latitude: 9.9400,
+      longitude: 76.2830,
     ),
     Restaurant(
       id: '5',
@@ -83,10 +96,11 @@ class _HomeScreenState extends State<HomeScreen> {
       cuisine: 'Mexican',
       rating: 4.5,
       reviews: 198,
-      distance: '0.8 km',
       imageUrl: 'https://via.placeholder.com/300x200?text=Taco+Restaurant',
       isOpen: true,
       deliveryTime: '15-25 min',
+      latitude: 9.9345,
+      longitude: 76.2622,
     ),
     Restaurant(
       id: '6',
@@ -94,29 +108,80 @@ class _HomeScreenState extends State<HomeScreen> {
       cuisine: 'Chinese',
       rating: 4.4,
       reviews: 267,
-      distance: '1.5 km',
       imageUrl: 'https://via.placeholder.com/300x200?text=Chinese+Restaurant',
       isOpen: false,
       deliveryTime: '40-50 min',
+      latitude: 9.9440,
+      longitude: 76.2755,
     ),
   ];
 
   String selectedFilter = 'All';
   final TextEditingController searchController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    _loadUserLocation();
+  }
+
+  Future<void> _loadUserLocation() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _userLatitude = location['latitude'] as double?;
+        _userLongitude = location['longitude'] as double?;
+        _locationLoading = false;
+        _locationError = null;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _locationLoading = false;
+        _locationError = 'Location unavailable';
+      });
+    }
+  }
+
+  String _getDistanceLabel(Restaurant restaurant) {
+    if (_locationLoading) {
+      return 'Detecting location...';
+    }
+
+    if (_locationError != null ||
+        _userLatitude == null ||
+        _userLongitude == null) {
+      return 'Location unavailable';
+    }
+
+    final distanceKm = _locationService.calculateDistance(
+      _userLatitude!,
+      _userLongitude!,
+      restaurant.latitude,
+      restaurant.longitude,
+    );
+    return _locationService.formatDistance(distanceKm);
+  }
+
   List<Restaurant> getFilteredRestaurants() {
     List<Restaurant> filtered = restaurants;
 
     if (selectedFilter != 'All') {
-      filtered = filtered
-          .where((r) => r.cuisine == selectedFilter)
-          .toList();
+      filtered = filtered.where((r) => r.cuisine == selectedFilter).toList();
     }
 
     if (searchController.text.isNotEmpty) {
       filtered = filtered
-          .where((r) =>
-              r.name.toLowerCase().contains(searchController.text.toLowerCase()))
+          .where(
+            (r) => r.name.toLowerCase().contains(
+              searchController.text.toLowerCase(),
+            ),
+          )
           .toList();
     }
 
@@ -148,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.white,
               child: Icon(Icons.person, color: const Color(0xFF2E7D32)),
             ),
-          )
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -171,7 +236,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
@@ -209,7 +277,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
                   children: [
-                    Icon(Icons.restaurant_menu, size: 64, color: Colors.grey[400]),
+                    Icon(
+                      Icons.restaurant_menu,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No restaurants found',
@@ -282,7 +354,9 @@ class _HomeScreenState extends State<HomeScreen> {
             Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
                   child: Image.network(
                     restaurant.imageUrl,
                     height: 200,
@@ -302,7 +376,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   top: 12,
                   right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: restaurant.isOpen ? Colors.green : Colors.red,
                       borderRadius: BorderRadius.circular(20),
@@ -322,7 +399,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   bottom: 12,
                   left: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black87,
                       borderRadius: BorderRadius.circular(8),
@@ -374,10 +454,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-                      Icon(
-                        Icons.favorite_border,
-                        color: Colors.grey[400],
-                      ),
+                      Icon(Icons.favorite_border, color: Colors.grey[400]),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -399,10 +476,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       Row(
                         children: [
-                          Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
-                            restaurant.distance,
+                            _getDistanceLabel(restaurant),
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -418,7 +499,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                          Icon(
+                            Icons.schedule,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             restaurant.deliveryTime,

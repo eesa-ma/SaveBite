@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 import 'package:save_bite/screens/restaurant_details_screen.dart';
+import '../services/location_service.dart';
 
 class Restaurant {
   final String id;
@@ -9,10 +10,11 @@ class Restaurant {
   final String cuisine;
   final double rating;
   final int reviews;
-  final String distance;
   final String imageUrl;
   final bool isOpen;
   final String deliveryTime;
+  final double? latitude;
+  final double? longitude;
 
   Restaurant({
     required this.id,
@@ -20,26 +22,30 @@ class Restaurant {
     required this.cuisine,
     required this.rating,
     required this.reviews,
-    required this.distance,
     required this.imageUrl,
     required this.isOpen,
     required this.deliveryTime,
+    required this.latitude,
+    required this.longitude,
   });
 
   factory Restaurant.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    final latitudeValue = data['latitude'];
+    final longitudeValue = data['longitude'];
     return Restaurant(
       id: doc.id,
       name: data['name'] ?? 'Unknown Restaurant',
       cuisine: data['cuisine'] ?? 'General',
       rating: (data['rating'] ?? 0).toDouble(),
       reviews: data['reviews'] ?? 0,
-      distance: data['distance'] ?? 'N/A',
       imageUrl:
           data['imageUrl'] ??
           'https://via.placeholder.com/300x200?text=Restaurant',
       isOpen: data['isOpen'] ?? true,
       deliveryTime: data['deliveryTime'] ?? 'N/A',
+      latitude: latitudeValue is num ? latitudeValue.toDouble() : null,
+      longitude: longitudeValue is num ? longitudeValue.toDouble() : null,
     );
   }
 }
@@ -54,24 +60,65 @@ class EntryScreen extends StatefulWidget {
 class _EntryScreenState extends State<EntryScreen> {
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final LocationService _locationService = LocationService();
   final TextEditingController searchController = TextEditingController();
   final FocusNode searchFocusNode = FocusNode();
   List<Restaurant> restaurants = [];
   bool isLoadingRestaurants = true;
-  int _selectedTab = 0; // 0: Restaurants, 1: Dishes
-  bool _isVegetarian = false;
-  bool _only99Store = false;
-  bool _onlyOffers = false;
-
-  // Filter options
-  String selectedFoodType = 'All';
-  String selectedAvailability = 'All';
-  String sortBy = 'Relevance';
+  double? _userLatitude;
+  double? _userLongitude;
+  bool _locationLoading = true;
+  String? _locationError;
 
   @override
   void initState() {
     super.initState();
+    _loadUserLocation();
     _loadRestaurants();
+  }
+
+  Future<void> _loadUserLocation() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _userLatitude = location['latitude'] as double?;
+        _userLongitude = location['longitude'] as double?;
+        _locationLoading = false;
+        _locationError = null;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _locationLoading = false;
+        _locationError = 'Location unavailable';
+      });
+    }
+  }
+
+  String _getDistanceLabel(Restaurant restaurant) {
+    if (_locationLoading) {
+      return 'Detecting location...';
+    }
+    if (_locationError != null ||
+        _userLatitude == null ||
+        _userLongitude == null ||
+        restaurant.latitude == null ||
+        restaurant.longitude == null) {
+      return 'Location unavailable';
+    }
+
+    final distanceKm = _locationService.calculateDistance(
+      _userLatitude!,
+      _userLongitude!,
+      restaurant.latitude!,
+      restaurant.longitude!,
+    );
+    return _locationService.formatDistance(distanceKm);
   }
 
   Future<void> _loadRestaurants() async {
@@ -616,13 +663,67 @@ class _EntryScreenState extends State<EntryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    restaurant.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            restaurant.name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            restaurant.cuisine,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Icon(Icons.favorite_border, color: Colors.grey[400]),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.star, size: 16, color: Colors.amber),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${restaurant.reviews} reviews',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _getDistanceLabel(restaurant),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Row(
