@@ -218,7 +218,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildMenuItem(
                       icon: Icons.history,
                       title: 'Order History',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).pushNamed('/reservations');
+                      },
                     ),
                     _buildMenuItem(
                       icon: Icons.favorite,
