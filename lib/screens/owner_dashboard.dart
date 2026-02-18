@@ -226,7 +226,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               TextField(
                 controller: descriptionController,
                 decoration: const InputDecoration(
-                  labelText: 'Description',
+                  labelText: 'Category',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 2,
@@ -2019,7 +2019,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             TextField(
               controller: descriptionController,
               decoration: const InputDecoration(
-                labelText: 'Description',
+                labelText: 'Category',
                 border: OutlineInputBorder(),
               ),
               maxLines: 2,

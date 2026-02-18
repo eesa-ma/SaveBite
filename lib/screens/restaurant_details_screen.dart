@@ -25,8 +25,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   );
   final ValueNotifier<Map<String, int>> _cartItems =
       ValueNotifier<Map<String, int>>({});
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  String _selectedCategory = 'All';
+  String _availabilityFilter = 'All'; // All, In Stock, Low Stock
+  String _categoryFilter = 'All'; // Filter by category/description
 
   static const Color _primaryColor = Color(0xFF2E7D32);
   static const Color _lightGrey = Color(0xFFF5F5F5);
@@ -50,8 +52,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     _cartItems.value = updated;
   }
 
-  int _getCartCount() =>
-      _cartItems.value.values.fold(0, (sum, qty) => sum + qty);
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,13 +91,28 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             return _buildEmptyState();
           }
 
-          // Filter items
+          // Filter items based on search, availability, and category
           final filteredItems = items
               .where(
                 (item) => item.name.toLowerCase().contains(
                   _searchQuery.toLowerCase(),
                 ),
               )
+              .where((item) {
+                switch (_availabilityFilter) {
+                  case 'In Stock':
+                    return item.quantityAvailable > 5;
+                  case 'Low Stock':
+                    return item.quantityAvailable > 0 && item.quantityAvailable <= 5;
+                  case 'All':
+                  default:
+                    return true;
+                }
+              })
+              .where((item) {
+                if (_categoryFilter == 'All') return true;
+                return item.description == _categoryFilter;
+              })
               .toList();
 
           final categories = [
@@ -110,8 +130,8 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               Expanded(
                 child: ListView(
                   children: [
-                    // Category filter
-                    _buildCategoryFilter(categories),
+                  // Availability and Category filters
+                  _buildFilters(categories),
                     // Food items
                     _buildFoodsList(filteredItems, user),
                     const SizedBox(height: 80), // Space for FAB
@@ -175,12 +195,27 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: TextField(
+        controller: _searchController,
         onChanged: (value) {
           setState(() => _searchQuery = value);
         },
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 14,
+        ),
         decoration: InputDecoration(
           hintText: 'Search for items...',
+          hintStyle: TextStyle(color: Colors.grey[400]),
           prefixIcon: const Icon(Icons.search, color: _mediumGrey),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close, color: _mediumGrey),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(color: _lightGrey),
@@ -191,57 +226,113 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           ),
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
           filled: true,
-          fillColor: _lightGrey,
+          fillColor: Colors.white,
         ),
       ),
     );
   }
 
-  Widget _buildInfoItem(String icon, String value, String label) {
+  Widget _buildFilters(List<String> categories) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(icon, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        // Availability filter
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Availability',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: ['All', 'In Stock', 'Low Stock'].map((availability) {
+                    final isSelected = _availabilityFilter == availability;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(availability),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() => _availabilityFilter = availability);
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: _primaryColor,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        side: BorderSide(
+                          color: isSelected ? _primaryColor : _lightGrey,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
         ),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        // Category filter
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Category',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: categories.map((category) {
+                    final isSelected = _categoryFilter == category;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(category),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() => _categoryFilter = category);
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: _primaryColor,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        side: BorderSide(
+                          color: isSelected ? _primaryColor : _lightGrey,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildCategoryFilter(List<String> categories) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: categories.map((category) {
-            final isSelected = _selectedCategory == category;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                label: Text(category),
-                selected: isSelected,
-                onSelected: (selected) {
-                  setState(() => _selectedCategory = category);
-                },
-                backgroundColor: Colors.white,
-                selectedColor: _primaryColor,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.w500,
-                ),
-                side: BorderSide(
-                  color: isSelected ? _primaryColor : _lightGrey,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
+  @deprecated
+  Widget _buildAvailabilityFilter() {
+    return const SizedBox.shrink();
   }
 
   Widget _buildFoodsList(List<FoodItem> items, User? user) {
@@ -440,7 +531,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -553,20 +644,21 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
       _cartItems.value = {};
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✓ Order placed successfully!'),
-            backgroundColor: _primaryColor,
-          ),
-        );
-        Navigator.pop(context);
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Order placed successfully!'),
+          backgroundColor: _primaryColor,
+        ),
+      );
+      Navigator.pop(context);
     } on StateError catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Checkout failed: $e'),
@@ -709,14 +801,17 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         });
       });
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Reserved $quantity x ${item.name}')),
       );
     } on StateError catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Reservation failed: $e')));
