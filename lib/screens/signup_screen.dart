@@ -262,10 +262,6 @@ class _SignupScreenState extends State<SignupScreen> {
                               value: 'Restaurant',
                               child: Text('Restaurant Owner'),
                             ),
-                            DropdownMenuItem(
-                              value: 'Admin',
-                              child: Text('Admin'),
-                            ),
                           ],
                           onChanged: (String? newValue) {
                             setState(() {

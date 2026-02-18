@@ -206,7 +206,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     }
 
     final nameController = TextEditingController();
-    final descriptionController = TextEditingController();
+    final categoryController = TextEditingController();
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
 
@@ -227,12 +227,11 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: descriptionController,
+                controller: categoryController,
                 decoration: const InputDecoration(
-                  labelText: 'Description',
+                  labelText: 'Category',
                   border: OutlineInputBorder(),
                 ),
-                maxLines: 2,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -264,7 +263,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           FilledButton(
             onPressed: () async {
               final name = nameController.text.trim();
-              final description = descriptionController.text.trim();
+              final category = categoryController.text.trim();
               final price = double.tryParse(priceController.text) ?? 0.0;
               final quantity = int.tryParse(quantityController.text) ?? 0;
 
@@ -281,7 +280,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 await _restaurantService.addMenuItem(
                   restaurantId: restaurantId,
                   name: name,
-                  description: description,
+                  description: category,
                   price: price,
                   quantityAvailable: quantity,
                 );
@@ -2020,7 +2019,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
   void _showEditDialog(int index) {
     final item = widget.menuItems[index];
     final nameController = TextEditingController(text: item.name);
-    final descriptionController = TextEditingController(text: item.description);
+    final categoryController = TextEditingController(text: item.description);
     final priceController = TextEditingController(text: item.price.toString());
     final quantityController = TextEditingController(
       text: item.quantity.toString(),
@@ -2042,12 +2041,11 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: descriptionController,
+              controller: categoryController,
               decoration: const InputDecoration(
-                labelText: 'Description',
+                labelText: 'Category',
                 border: OutlineInputBorder(),
               ),
-              maxLines: 2,
             ),
             const SizedBox(height: 16),
             TextField(
@@ -2078,13 +2076,13 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
           FilledButton(
             onPressed: () {
               final name = nameController.text.trim();
-              final description = descriptionController.text.trim();
+              final category = categoryController.text.trim();
               final price = double.tryParse(priceController.text) ?? item.price;
               final quantity =
                   int.tryParse(quantityController.text) ?? item.quantity;
 
               widget
-                  .onUpdateItem(item, name, description, price, quantity)
+                  .onUpdateItem(item, name, category, price, quantity)
                   .then((_) {
                     if (!mounted) {
                       return;
