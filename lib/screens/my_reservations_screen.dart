@@ -219,6 +219,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     final status = data['status'] ?? 'new';
     final createdAt = data['createdAt'];
     final price = (data['price'] is num) ? (data['price'] as num) : 0.0;
+    final restaurantName = data['restaurantName'] ?? 'Restaurant';
 
     final timestamp = createdAt is Timestamp
         ? createdAt.toDate()
@@ -325,10 +326,20 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '$quantity item${quantity > 1 ? 's' : ''}',
+                            restaurantName,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$quantity item${quantity > 1 ? 's' : ''}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[500],
                             ),
                           ),
                         ],
@@ -343,6 +354,36 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                // Order date
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: MyReservationsScreen._lightGrey,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Order Date',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        _formatFullDate(timestamp),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 // Timeline indicator
@@ -713,5 +754,23 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     } else {
       return '${diff.inDays}d ago';
     }
+  }
+
+  String _formatFullDate(DateTime dt) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }
