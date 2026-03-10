@@ -148,7 +148,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           itemBuilder: (context, index) {
             final order = docs[index];
             final data = order.data();
-            return _buildOrderCard(data, context);
+            return _buildOrderCard(data, context, orderId: order.id);
           },
         );
       },
@@ -202,7 +202,12 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           itemBuilder: (context, index) {
             final order = docs[index];
             final data = order.data();
-            return _buildOrderCard(data, context, isHistory: true);
+            return _buildOrderCard(
+              data,
+              context,
+              isHistory: true,
+              orderId: order.id,
+            );
           },
         );
       },
@@ -213,7 +218,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     Map<String, dynamic> data,
     BuildContext context, {
     bool isHistory = false,
+    String orderId = '',
   }) {
+    final hasReview = data['reviewed'] == true;
     final foodName = data['foodName'] ?? 'Item';
     final quantity = (data['quantity'] is num)
         ? (data['quantity'] as num).toInt()
@@ -385,9 +392,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () => _showCancelDialog(context, data),
                             icon: const Icon(Icons.close, size: 16),
-             
-                                             label: const Text('Cancel',
-                            ),
+                            label: const Text('Cancel'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
@@ -396,12 +401,258 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                         ),
                     ],
                   ),
+                // Review button for picked-up orders
+                if (isHistory && status == 'pickedUp')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: hasReview
+                          ? OutlinedButton.icon(
+                              onPressed: null,
+                              icon: const Icon(Icons.star, size: 16),
+                              label: const Text('Reviewed'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.amber[700],
+                                side: BorderSide(color: Colors.amber[300]!),
+                              ),
+                            )
+                          : ElevatedButton.icon(
+                              onPressed: () =>
+                                  _showReviewDialog(context, orderId, data),
+                              icon: const Icon(Icons.star_border, size: 16),
+                              label: const Text('Write a Review'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    MyReservationsScreen._primaryColor,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _showReviewDialog(
+    BuildContext context,
+    String orderId,
+    Map<String, dynamic> orderData,
+  ) {
+    int selectedRating = 0;
+    final commentController = TextEditingController();
+    bool submitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'How was your order?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    orderData['foodName'] ?? 'Item',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 20),
+                  // Star rating
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) {
+                      final star = i + 1;
+                      return GestureDetector(
+                        onTap: () => setSheetState(() => selectedRating = star),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Icon(
+                            star <= selectedRating
+                                ? Icons.star
+                                : Icons.star_border,
+                            color: Colors.amber,
+                            size: 40,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      selectedRating == 0
+                          ? 'Tap a star to rate'
+                          : ['', 'Poor', 'Fair', 'Good', 'Very Good',
+                              'Excellent'][selectedRating],
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: selectedRating == 0
+                            ? Colors.grey
+                            : Colors.amber[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Comment field
+                  TextField(
+                    controller: commentController,
+                    maxLines: 3,
+                    maxLength: 300,
+                    decoration: InputDecoration(
+                      hintText: 'Tell us what you thought (optional)...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Color(0xFFF5F5F5)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Color(0xFFF5F5F5)),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF5F5F5),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: submitting || selectedRating == 0
+                          ? null
+                          : () async {
+                              setSheetState(() => submitting = true);
+                              final success = await _submitReview(
+                                orderId: orderId,
+                                orderData: orderData,
+                                rating: selectedRating,
+                                comment: commentController.text.trim(),
+                              );
+                              if (!sheetContext.mounted) return;
+                              Navigator.pop(sheetContext);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(success
+                                        ? 'Thanks for your review!'
+                                        : 'Could not submit review. Try again.'),
+                                    backgroundColor: success
+                                        ? MyReservationsScreen._primaryColor
+                                        : Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: MyReservationsScreen._primaryColor,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Submit Review',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _submitReview({
+    required String orderId,
+    required Map<String, dynamic> orderData,
+    required int rating,
+    required String comment,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      // Save review document
+      final reviewRef =
+          FirebaseFirestore.instance.collection('reviews').doc();
+      batch.set(reviewRef, {
+        'orderId': orderId,
+        'restaurantId': orderData['restaurantId'] ?? '',
+        'foodItemId': orderData['foodItemId'] ?? '',
+        'userId': user.uid,
+        'foodName': orderData['foodName'] ?? '',
+        'rating': rating,
+        'comment': comment,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Mark the order as reviewed
+      final orderRef =
+          FirebaseFirestore.instance.collection('orders').doc(orderId);
+      batch.update(orderRef, {'reviewed': true, 'rating': rating});
+
+      await batch.commit();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void _showOrderDetails(BuildContext context, Map<String, dynamic> order) {

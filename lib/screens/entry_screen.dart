@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
@@ -73,26 +74,79 @@ class _EntryScreenState extends State<EntryScreen> {
   bool _locationLoading = true;
   String? _locationError;
   Set<String> _favoriteRestaurantIds = <String>{};
+  Set<String>? _categoryRestaurantIds;
+  bool _categoryLoading = false;
+  String? _selectedMindCategory;
+  final Map<String, String> _distanceCache = {};
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    _loadUserLocation();
-    _loadRestaurants();
-    _loadFavoriteRestaurants();
+    _initScreen();
   }
 
-  Future<void> _loadFavoriteRestaurants() async {
-    final favorites = await _favoritesService.getFavoriteRestaurants();
-    if (!mounted) {
-      return;
-    }
+  Future<void> _initScreen() async {
+    final results = await Future.wait([
+      _fetchLocation(),
+      _fetchRestaurants(),
+      _fetchFavoriteRestaurants(),
+    ]);
+    if (!mounted) return;
+    final loc = results[0] as Map<String, dynamic>;
+    final rest = results[1] as List<Restaurant>;
+    final favs = results[2] as Set<String>;
     setState(() {
-      _favoriteRestaurantIds = favorites
+      _userLatitude = loc['lat'] as double?;
+      _userLongitude = loc['lng'] as double?;
+      _locationLoading = false;
+      _locationError = loc['error'] as String?;
+      restaurants = rest;
+      isLoadingRestaurants = false;
+      _favoriteRestaurantIds = favs;
+    });
+  }
+
+  Future<Map<String, dynamic>> _fetchLocation() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      return {
+        'lat': location['latitude'] as double?,
+        'lng': location['longitude'] as double?,
+        'error': null,
+      };
+    } catch (_) {
+      return {'lat': null, 'lng': null, 'error': 'Location unavailable'};
+    }
+  }
+
+  Future<List<Restaurant>> _fetchRestaurants() async {
+    try {
+      final snapshot = await _firestore.collection('restaurants').get();
+      return snapshot.docs.map((doc) => Restaurant.fromFirestore(doc)).toList();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading restaurants: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return [];
+    }
+  }
+
+  Future<Set<String>> _fetchFavoriteRestaurants() async {
+    try {
+      final favorites = await _favoritesService.getFavoriteRestaurants();
+      return favorites
           .map((f) => (f['id'] ?? '').toString())
           .where((id) => id.isNotEmpty)
           .toSet();
-    });
+    } catch (_) {
+      return {};
+    }
   }
 
   Future<void> _toggleRestaurantFavorite(Restaurant restaurant) async {
@@ -147,72 +201,28 @@ class _EntryScreenState extends State<EntryScreen> {
     }
   }
 
-  Future<void> _loadUserLocation() async {
-    try {
-      final location = await _locationService.getCurrentLocation();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _userLatitude = location['latitude'] as double?;
-        _userLongitude = location['longitude'] as double?;
-        _locationLoading = false;
-        _locationError = null;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _locationLoading = false;
-        _locationError = 'Location unavailable';
-      });
-    }
-  }
-
   String _getDistanceLabel(Restaurant restaurant) {
-    if (_locationLoading) {
-      return 'Detecting location...';
-    }
+    if (_locationLoading) return 'Detecting location...';
+    final cached = _distanceCache[restaurant.id];
+    if (cached != null) return cached;
+    String result;
     if (_locationError != null ||
         _userLatitude == null ||
         _userLongitude == null ||
         restaurant.latitude == null ||
         restaurant.longitude == null) {
-      return 'Location unavailable';
+      result = 'Location unavailable';
+    } else {
+      final distanceKm = _locationService.calculateDistance(
+        _userLatitude!,
+        _userLongitude!,
+        restaurant.latitude!,
+        restaurant.longitude!,
+      );
+      result = _locationService.formatDistance(distanceKm);
     }
-
-    final distanceKm = _locationService.calculateDistance(
-      _userLatitude!,
-      _userLongitude!,
-      restaurant.latitude!,
-      restaurant.longitude!,
-    );
-    return _locationService.formatDistance(distanceKm);
-  }
-
-  Future<void> _loadRestaurants() async {
-    try {
-      final snapshot = await _firestore.collection('restaurants').get();
-      setState(() {
-        restaurants = snapshot.docs
-            .map((doc) => Restaurant.fromFirestore(doc))
-            .toList();
-        isLoadingRestaurants = false;
-      });
-    } catch (e) {
-      setState(() {
-        isLoadingRestaurants = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading restaurants: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    _distanceCache[restaurant.id] = result;
+    return result;
   }
 
   final List<Map<String, String>> categories = [
@@ -266,20 +276,57 @@ class _EntryScreenState extends State<EntryScreen> {
     },
   ];
 
-  void _applyMindCategory(Map<String, String> category) {
-    final cuisine = category['cuisine'] ?? 'All';
+  void _applyMindCategory(Map<String, String> category) async {
+    final keyword = category['keyword'] ?? '';
+    if (keyword.isEmpty) return;
+
+    // Deselect if already active
+    if (_selectedMindCategory == category['name']) {
+      setState(() {
+        _selectedMindCategory = null;
+        _categoryRestaurantIds = null;
+      });
+      return;
+    }
+
     setState(() {
-      selectedFilter = cuisine;
-      // Keep category filtering independent from typed search
-      // so options like Pizza/Burger always show mapped cuisine results.
+      _categoryLoading = true;
+      _categoryRestaurantIds = null;
+      _selectedMindCategory = category['name'];
+      selectedFilter = 'All';
       searchController.clear();
     });
+    try {
+      final snapshot = await _firestore.collection('foodItems').get();
+      final ids = snapshot.docs
+          .where((doc) {
+            final name = (doc.data()['name'] ?? '').toString().toLowerCase();
+            return name.contains(keyword.toLowerCase());
+          })
+          .map((doc) => (doc.data()['restaurantId'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      if (!mounted) return;
+      setState(() {
+        _categoryRestaurantIds = ids;
+        _categoryLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _categoryLoading = false;
+      });
+    }
   }
 
   List<Restaurant> getFilteredRestaurants() {
     List<Restaurant> filtered = restaurants;
 
-    if (selectedFilter != 'All') {
+    if (_categoryRestaurantIds != null) {
+      filtered = filtered
+          .where((r) => _categoryRestaurantIds!.contains(r.id))
+          .toList();
+    } else if (selectedFilter != 'All') {
       filtered = filtered.where((r) => r.cuisine == selectedFilter).toList();
     }
 
@@ -387,7 +434,21 @@ class _EntryScreenState extends State<EntryScreen> {
                   }
                 },
                 onChanged: (value) {
-                  setState(() {});
+                  _searchDebounce?.cancel();
+                  if (value.isEmpty) {
+                    setState(() {
+                      _categoryRestaurantIds = null;
+                      _selectedMindCategory = null;
+                    });
+                  } else {
+                    _searchDebounce = Timer(
+                      const Duration(milliseconds: 250),
+                      () => setState(() {
+                        _categoryRestaurantIds = null;
+                        _selectedMindCategory = null;
+                      }),
+                    );
+                  }
                 },
                 decoration: InputDecoration(
                   hintText: "Search for 'Restaurant'",
@@ -585,6 +646,8 @@ class _EntryScreenState extends State<EntryScreen> {
                 itemCount: categories.length,
                 itemBuilder: (context, index) {
                   final category = categories[index];
+                  final isSelected =
+                      _selectedMindCategory == category['name'];
                   return Column(
                     children: [
                       GestureDetector(
@@ -595,28 +658,57 @@ class _EntryScreenState extends State<EntryScreen> {
                           margin: const EdgeInsets.only(right: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
+                            border: isSelected
+                                ? Border.all(
+                                    color: const Color(0xFF2E7D32),
+                                    width: 3,
+                                  )
+                                : null,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.grey.withValues(alpha: 0.2),
-                                blurRadius: 4,
+                                color: isSelected
+                                    ? const Color(0xFF2E7D32)
+                                        .withValues(alpha: 0.35)
+                                    : Colors.grey.withValues(alpha: 0.2),
+                                blurRadius: isSelected ? 8 : 4,
                                 offset: const Offset(0, 2),
                               ),
                             ],
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              category['image']!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey[300],
-                                  child: Icon(
-                                    Icons.restaurant_menu,
-                                    color: Colors.grey[600],
+                            borderRadius: BorderRadius.circular(
+                              isSelected ? 9 : 12,
+                            ),
+                            child: Stack(
+                              children: [
+                                Image.network(
+                                  category['image']!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[300],
+                                      child: Icon(
+                                        Icons.restaurant_menu,
+                                        color: Colors.grey[600],
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    color: const Color(0xFF2E7D32)
+                                        .withValues(alpha: 0.25),
+                                    child: const Icon(
+                                      Icons.check_circle,
+                                      color: Colors.white,
+                                      size: 28,
+                                    ),
                                   ),
-                                );
-                              },
+                              ],
                             ),
                           ),
                         ),
@@ -624,10 +716,14 @@ class _EntryScreenState extends State<EntryScreen> {
                       const SizedBox(height: 8),
                       Text(
                         category['name']!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? const Color(0xFF2E7D32)
+                              : Colors.black,
                         ),
                       ),
                     ],
@@ -691,7 +787,7 @@ class _EntryScreenState extends State<EntryScreen> {
             // Restaurants List
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: isLoadingRestaurants
+              child: (isLoadingRestaurants || _categoryLoading)
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(32.0),
@@ -754,6 +850,8 @@ class _EntryScreenState extends State<EntryScreen> {
       onSelected: (value) {
         setState(() {
           selectedFilter = label;
+          _categoryRestaurantIds = null;
+          _selectedMindCategory = null;
         });
       },
       backgroundColor: Colors.white,
@@ -1005,6 +1103,7 @@ class _EntryScreenState extends State<EntryScreen> {
   }
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     searchController.dispose();
     searchFocusNode.dispose();
     super.dispose();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +32,8 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'All';
   Set<String> _favoriteFoodItemIds = <String>{};
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   // Location data
   double? _userLatitude;
@@ -42,6 +45,15 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   static const Color _primaryColor = Color(0xFF2E7D32);
   static const Color _lightGrey = Color(0xFFF5F5F5);
   static const Color _mediumGrey = Color(0xFFBDBDBD);
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _reservingIds.dispose();
+    _cartItems.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -214,14 +226,15 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           }
 
           // Filter items
-          final filteredItems = items
-              .where(
-                (item) =>
-                    item.name.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ),
-              )
-              .toList();
+          final filteredItems = items.where((item) {
+            final matchesSearch = _searchQuery.isEmpty ||
+                item.name
+                    .toLowerCase()
+                    .startsWith(_searchQuery.toLowerCase());
+            final matchesCategory = _selectedCategory == 'All' ||
+                item.description == _selectedCategory;
+            return matchesSearch && matchesCategory;
+          }).toList();
 
           final categories = [
             'All',
@@ -315,12 +328,30 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: TextField(
+        controller: _searchController,
         onChanged: (value) {
-          setState(() => _searchQuery = value);
+          _searchDebounce?.cancel();
+          if (value.isEmpty) {
+            // Clear immediately — no delay needed
+            setState(() => _searchQuery = '');
+          } else {
+            _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+              setState(() => _searchQuery = value);
+            });
+          }
         },
         decoration: InputDecoration(
           hintText: 'Search for items...',
           prefixIcon: const Icon(Icons.search, color: _mediumGrey),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: _mediumGrey),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(color: _lightGrey),
