@@ -115,7 +115,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           return const Center(
             child: CircularProgressIndicator(
               color: MyReservationsScreen._primaryColor,
-            ),
+              ),
           );
         }
 
@@ -126,8 +126,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.receipt_long,
-                    size: 64, color: Colors.grey[300]),
+                Icon(Icons.receipt_long, size: 64, color: Colors.grey[300]),
                 const SizedBox(height: 16),
                 const Text(
                   'No active orders',
@@ -210,16 +209,18 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     );
   }
 
-  Widget _buildOrderCard(Map<String, dynamic> data, BuildContext context,
-      {bool isHistory = false}) {
+  Widget _buildOrderCard(
+    Map<String, dynamic> data,
+    BuildContext context, {
+    bool isHistory = false,
+  }) {
     final foodName = data['foodName'] ?? 'Item';
     final quantity = (data['quantity'] is num)
         ? (data['quantity'] as num).toInt()
         : 1;
     final status = data['status'] ?? 'new';
     final createdAt = data['createdAt'];
-    final price = (data['price'] is num) ? (data['price'] as num) : 0.0;
-    final restaurantName = data['restaurantName'] ?? 'Restaurant';
+    final price   = (data['price'] is num) ? (data['price'] as num) : 0.0;
 
     final timestamp = createdAt is Timestamp
         ? createdAt.toDate()
@@ -269,7 +270,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -294,10 +295,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                 ),
                 Text(
                   _formatTime(timestamp),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
-                  ),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
             ),
@@ -326,20 +324,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            restaurantName,
+                            '$quantity item${quantity > 1 ? 's' : ''}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$quantity item${quantity > 1 ? 's' : ''}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[500],
                             ),
                           ),
                         ],
@@ -356,36 +344,6 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Order date
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: MyReservationsScreen._lightGrey,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Order Date',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        _formatFullDate(timestamp),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
                 // Timeline indicator
                 if (status == 'preparing' || status == 'ready')
                   Column(
@@ -397,9 +355,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           minHeight: 4,
                           backgroundColor: MyReservationsScreen._lightGrey,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            status == 'ready'
-                                ? Colors.green
-                                : Colors.orange,
+                            status == 'ready' ? Colors.green : Colors.orange,
                           ),
                         ),
                       ),
@@ -416,8 +372,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           icon: const Icon(Icons.info_outline, size: 16),
                           label: const Text('Details'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                MyReservationsScreen._primaryColor,
+                            foregroundColor: MyReservationsScreen._primaryColor,
                             side: const BorderSide(
                               color: MyReservationsScreen._primaryColor,
                             ),
@@ -430,7 +385,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () => _showCancelDialog(context, data),
                             icon: const Icon(Icons.close, size: 16),
-                            label: const Text('Cancel'),
+             
+                                             label: const Text('Cancel',
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
@@ -480,7 +437,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: MyReservationsScreen._primaryColor,
                   ),
-                  child: const Text('Close', style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
             ],
@@ -496,10 +456,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
-          ),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           Text(
             value,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
@@ -518,9 +475,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Are you sure you want to cancel this order?',
-            ),
+            const Text('Are you sure you want to cancel this order?'),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -609,11 +564,16 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       if (user == null) throw Exception('User not authenticated');
 
       final foodItemId = orderData['foodItemId'] as String?;
-      final orderedQuantity = orderData['quantity'] as int?
-          ?? (orderData['quantity'] is num ? (orderData['quantity'] as num).toInt() : 1);
-      final foodName = orderData['foodName'] as String? ?? 'Item';
+      final orderedQuantity =
+          orderData['quantity'] as int? ??
+          (orderData['quantity'] is num
+              ? (orderData['quantity'] as num).toInt()
+              : 1);
+      final foodName = orderData['foodName'] as String? ?? 'Unknown Item';
 
-      if (foodItemId == null || foodItemId.isEmpty) {
+      if 
+         (foodItemId == null ||
+          foodItemId.isEmpty) {
         throw Exception('Invalid order data');
       }
 
@@ -652,8 +612,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         }
 
         // 2. Get the food item document
+          
         final foodRef =
-            FirebaseFirestore.instance.collection('foodItems').doc(foodItemId);
+            FirebaseFirestore.instance
+          .collection('foodItems')
+          .doc(foodItemId);
         final foodSnapshot = await transaction.get(foodRef);
 
         if (!foodSnapshot.exists) {
@@ -671,9 +634,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
 
         // 4. Update order status to cancelled
         transaction.update(orderRef, {
-          'status': 'cancelled',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        });
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+      });
 
         // 5. Restore food quantity and update availability
         transaction.update(foodRef, {
@@ -683,7 +646,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       });
 
       // Show success message
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -697,9 +660,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                     SizedBox(width: 12),
                     Text(
                       'Order cancelled successfully',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(  fontWeight: FontWeight.bold  ),
                     ),
                   ],
                 ),
@@ -717,7 +678,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       }
     } catch (e) {
       // Show error message
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -754,23 +715,5 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     } else {
       return '${diff.inDays}d ago';
     }
-  }
-
-  String _formatFullDate(DateTime dt) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }

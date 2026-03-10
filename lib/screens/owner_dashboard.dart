@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_serivce.dart';
 import '../services/restaurant_service.dart';
-import '../utils/theme_manager.dart';
 import 'map_picker_screen.dart';
 
 class OwnerDashboard extends StatefulWidget {
@@ -17,6 +16,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
+  bool _selectionSyncScheduled = false;
   double? _restaurantLatitude;
   double? _restaurantLongitude;
 
@@ -25,6 +25,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       {};
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _menuSnapshotCache =
       {};
+    QuerySnapshot<Map<String, dynamic>>? _restaurantsSnapshotCache;
 
   _LiveOrderStatus _statusFromString(String? value) {
     switch (value) {
@@ -212,7 +213,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Add Menu Item'),
         content: SingleChildScrollView(
           child: Column(
@@ -258,7 +259,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -269,7 +270,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               final quantity = int.tryParse(quantityController.text) ?? 0;
 
               if (name.isEmpty || price <= 0 || quantity <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('Enter a name, price, and quantity.'),
                   ),
@@ -285,10 +286,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   price: price,
                   quantityAvailable: quantity,
                 );
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Item added successfully!'),
@@ -296,10 +297,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   ),
                 );
               } catch (error) {
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Failed to add item: $error')),
                 );
@@ -315,7 +316,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     );
   }
 
-  void _openAddRestaurantDialog() {
+  Future<void> _openAddRestaurantDialog() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -330,79 +331,87 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final emailController = TextEditingController();
     final hoursController = TextEditingController();
 
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Add Restaurant'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Restaurant Name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressController,
-              readOnly: true,
-              decoration: InputDecoration(
-                labelText: 'Address',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.location_on, color: Color(0xFF4CAF50)),
-                  onPressed: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MapPickerScreen(),
-                      ),
-                    );
-
-                    if (result != null) {
-                      setState(() {
-                        _restaurantLatitude = result['latitude'];
-                        _restaurantLongitude = result['longitude'];
-                        addressController.text = result['address'];
-                      });
-                    }
-                  },
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Restaurant Name',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: addressController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Address',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(
+                        Icons.location_on,
+                        color: Color(0xFF4CAF50),
+                      ),
+                      onPressed: () async {
+                        final result = await Navigator.push(
+                          dialogContext,
+                          MaterialPageRoute(
+                            builder: (context) => MapPickerScreen(),
+                          ),
+                        );
+
+                        if (result != null) {
+                          setState(() {
+                            _restaurantLatitude = result['latitude'];
+                            _restaurantLongitude = result['longitude'];
+                            addressController.text = result['address'];
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: hoursController,
+                  decoration: const InputDecoration(
+                    labelText: 'Operating Hours',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: hoursController,
-              decoration: const InputDecoration(
-                labelText: 'Operating Hours',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -420,7 +429,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   hours.isEmpty ||
                   _restaurantLatitude == null ||
                   _restaurantLongitude == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('Fill all fields including location.'),
                   ),
@@ -440,22 +449,22 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   latitude: _restaurantLatitude!,
                   longitude: _restaurantLongitude!,
                 );
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
                 setState(() {
                   _selectedRestaurantId = doc.id;
                   _selectedRestaurantCache = null;
                 });
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Restaurant added.')),
                 );
               } catch (error) {
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Failed to add restaurant: $error')),
                 );
@@ -469,6 +478,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         ],
       ),
     );
+
+    nameController.dispose();
+    addressController.dispose();
+    phoneController.dispose();
+    emailController.dispose();
+    hoursController.dispose();
   }
 
   @override
@@ -589,8 +604,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           ? _buildCenteredMessage('Please sign in to view your dashboard.')
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _restaurantService.streamRestaurants(user.uid),
-              builder: (context, snapshot) {
-                final docs = snapshot.data?.docs ?? [];
+              builder: (_, snapshot) {
+                if (snapshot.hasData) {
+                  _restaurantsSnapshotCache = snapshot.data;
+                }
+                final docs =
+                    snapshot.data?.docs ?? _restaurantsSnapshotCache?.docs ?? [];
 
                 if (snapshot.hasError) {
                   return _buildCenteredMessage(
@@ -628,14 +647,18 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 final selected = restaurants.firstWhere(
                   (r) => r.id == selectedId,
                 );
-                if (_selectedRestaurantCache?.id != selected.id) {
+                if ((!hasSelection || _selectedRestaurantCache?.id != selected.id) &&
+                    !_selectionSyncScheduled) {
+                  _selectionSyncScheduled = true;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() {
-                        _selectedRestaurantCache = selected;
-                        _selectedRestaurantId = selected.id;
-                      });
+                    _selectionSyncScheduled = false;
+                    if (!mounted) {
+                      return;
                     }
+                    setState(() {
+                      _selectedRestaurantCache = selected;
+                      _selectedRestaurantId = selected.id;
+                    });
                   });
                 }
 
@@ -655,29 +678,26 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         address: selected.address,
                         isOpen: selected.isOpen,
                         onToggleStatus: (isOpen) async {
+                          final messenger = ScaffoldMessenger.of(context);
                           try {
                             await _restaurantService.updateRestaurantStatus(
                               selected.id,
                               isOpen,
                             );
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Restaurant is now ${isOpen ? "Open" : "Closed"}',
-                                  ),
-                                  duration: const Duration(seconds: 2),
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Restaurant is now ${isOpen ? "Open" : "Closed"}',
                                 ),
-                              );
-                            }
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
                           } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error updating status: $e'),
-                                ),
-                              );
-                            }
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('Error updating status: $e'),
+                              ),
+                            );
                           }
                         },
                       ),
@@ -705,7 +725,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 
   Widget _buildCenteredLoading() {
     return const Center(
-      child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+      child: CircularProgressIndicator(
+        color: Color(0xFF4CAF50),
+      ),
     );
   }
 
@@ -873,7 +895,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -918,7 +940,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                     Text(
                       widget.address,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 14,
                       ),
                     ),
@@ -948,8 +970,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                       child: Switch(
                         value: widget.isOpen,
                         onChanged: widget.onToggleStatus,
-                        activeColor: Colors.white,
-                        activeTrackColor: Colors.white.withOpacity(0.4),
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: Colors.white.withValues(alpha: 0.4),
                         inactiveThumbColor: Colors.white60,
                         inactiveTrackColor: Colors.black12,
                       ),
@@ -1000,7 +1022,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1010,7 +1032,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                               'Total Revenue',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -1039,7 +1061,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1049,7 +1071,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                               'Orders (Tap History)',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -1223,7 +1245,11 @@ class _RestaurantSwitcher extends StatelessWidget {
               child: const Stack(
                 alignment: Alignment.center,
                 children: [
-                  Icon(Icons.storefront, size: 24, color: Colors.white),
+                  Icon(
+                    Icons.storefront,
+                    size: 24,
+                    color: Colors.white,
+                  ),
                   Positioned(
                     right: 10,
                     bottom: 12,
@@ -1481,7 +1507,7 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
                 height: 220,
                 child: ListView.separated(
                   itemCount: filteredOrders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, index) =>
                       buildOrderTile(filteredOrders[index]),
                 ),
@@ -1893,7 +1919,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               widget
                   .onDeleteItem(item)
                   .then((_) {
-                    if (!mounted) {
+                    if (!mounted || !context.mounted) {
                       return;
                     }
                     Navigator.pop(context);
@@ -1902,7 +1928,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
                     );
                   })
                   .catchError((error) {
-                    if (!mounted) {
+                    if (!mounted || !context.mounted) {
                       return;
                     }
                     Navigator.pop(context);
@@ -2078,7 +2104,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
           FilledButton(
             onPressed: () {
               final name = nameController.text.trim();
-              final description = descriptionController.text.trim();
+            final description = descriptionController.text.trim();
               final price = double.tryParse(priceController.text) ?? item.price;
               final quantity =
                   int.tryParse(quantityController.text) ?? item.quantity;
@@ -2086,7 +2112,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               widget
                   .onUpdateItem(item, name, description, price, quantity)
                   .then((_) {
-                    if (!mounted) {
+                    if (!mounted || !context.mounted) {
                       return;
                     }
                     Navigator.pop(context);
@@ -2098,7 +2124,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
                     );
                   })
                   .catchError((error) {
-                    if (!mounted) {
+                    if (!mounted || !context.mounted) {
                       return;
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -2140,13 +2166,13 @@ class _MenuItemCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAvailable
-              ? const Color(0xFF4CAF50).withOpacity(0.3)
-              : Colors.grey.withOpacity(0.3),
+              ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.3),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -2191,7 +2217,10 @@ class _MenuItemCard extends StatelessWidget {
                     item.description,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -2247,7 +2276,9 @@ class _MenuItemCard extends StatelessWidget {
                     activeThumbColor: const Color(0xFF4CAF50),
                     activeTrackColor: const Color(
                       0xFF4CAF50,
-                    ).withValues(alpha: 0.4),
+                    ).withValues(
+                      alpha: 0.4,
+                    ),
                     inactiveThumbColor: Colors.grey[400],
                     inactiveTrackColor: Colors.grey[300],
                   ),
@@ -2339,7 +2370,7 @@ class _LiveOrder {
   final List<_OrderLine> lines;
 
   double get subtotal =>
-      lines.fold(0.0, (sum, line) => sum + (line.price * line.quantity));
+      lines.fold(0.0, (total, line) => total + (line.price * line.quantity));
 }
 
 class _OrderLine {
@@ -2551,6 +2582,9 @@ void _handleLogout(BuildContext context) {
             final authService = AuthService();
             try {
               await authService.logout();
+              if (!context.mounted) {
+                return;
+              }
               Navigator.pop(context); // Close dialog
               Navigator.pushReplacementNamed(context, '/entry');
               ScaffoldMessenger.of(context).showSnackBar(
@@ -2560,6 +2594,9 @@ void _handleLogout(BuildContext context) {
                 ),
               );
             } catch (e) {
+              if (!context.mounted) {
+                return;
+              }
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -2666,6 +2703,10 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
       // For now, just simulate a save
       await Future.delayed(const Duration(seconds: 1));
 
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _isEditing = false;
         _isSaving = false;
@@ -2678,6 +2719,9 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
         ),
       );
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _isSaving = false;
       });
@@ -2863,6 +2907,10 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
               'updatedAt': FieldValue.serverTimestamp(),
             });
 
+        if (!mounted) {
+          return;
+        }
+
         setState(() {
           _isEditing = false;
           _isSaving = false;
@@ -2876,6 +2924,9 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
         );
       }
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _isSaving = false;
       });
@@ -3039,13 +3090,6 @@ class _SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<_SettingsDialog> {
   bool _notificationsEnabled = true;
-  late bool _darkModeEnabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _darkModeEnabled = ThemeManager.isDarkMode;
-  }
 
   void _showHelpSupport(BuildContext context) {
     showDialog(
@@ -3140,27 +3184,6 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 SnackBar(
                   content: Text(
                     value ? 'Notifications enabled' : 'Notifications disabled',
-                  ),
-                  backgroundColor: const Color(0xFF2E7D32),
-                ),
-              );
-            },
-            activeThumbColor: const Color(0xFF2E7D32),
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.dark_mode, color: Color(0xFF2E7D32)),
-            title: const Text('Dark Mode'),
-            subtitle: const Text('Switch to dark theme'),
-            value: _darkModeEnabled,
-            onChanged: (value) {
-              setState(() {
-                _darkModeEnabled = value;
-              });
-              ThemeManager.toggleTheme(value);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    value ? 'Dark mode enabled' : 'Dark mode disabled',
                   ),
                   backgroundColor: const Color(0xFF2E7D32),
                 ),
@@ -3359,7 +3382,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: statusColor.withOpacity(0.1),
+                                      color: statusColor.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
@@ -3425,7 +3448,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.white.withOpacity(0.2),
+          color: isSelected
+              ? Colors.white
+              : Colors.white.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(

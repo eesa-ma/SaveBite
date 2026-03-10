@@ -10,6 +10,7 @@ import 'package:save_bite/screens/signup_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
 import 'package:save_bite/screens/profile_sync_screen.dart';
 import 'package:save_bite/screens/my_reservations_screen.dart';
+import 'package:save_bite/screens/favorites_screen.dart';
 import 'package:save_bite/utils/theme_manager.dart';
 
 void main() async {
@@ -22,30 +23,56 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  ThemeData _buildTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final base = ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF2E7D32),
+        brightness: brightness,
+      ),
+      useMaterial3: true,
+    );
+
+    return base.copyWith(
+      scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
+      appBarTheme: AppBarTheme(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFF2E7D32),
+        foregroundColor: Colors.white,
+        centerTitle: false,
+        elevation: 0,
+      ),
+      cardTheme: CardThemeData(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade900,
+        contentTextStyle: const TextStyle(color: Colors.white),
+      ),
+    );
+  }
+
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeManager.themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
+      builder: (_, ThemeMode currentMode, _) {
         return MaterialApp(
           title: 'SaveBite',
           debugShowCheckedModeBanner: false,
           themeMode: currentMode,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF2E7D32),
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF2E7D32),
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          ),
+          theme: _buildTheme(Brightness.light),
+          darkTheme: _buildTheme(Brightness.dark),
           home: const InitialScreen(),
           routes: {
             '/login': (context) => const SignupScreen(),
@@ -55,6 +82,7 @@ class MyApp extends StatelessWidget {
             '/restaurant': (context) => const OwnerDashboard(),
             '/admin': (context) => const AdminDashboard(),
             '/profile': (context) => const ProfileScreen(),
+            '/favorites': (context) => const FavoritesScreen(),
             '/profile-sync': (context) => const ProfileSyncScreen(),
             '/reservations': (context) => const MyReservationsScreen(),
           },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
+import 'package:save_bite/services/favorites_service.dart';
 import 'package:save_bite/screens/restaurant_details_screen.dart';
 import '../services/location_service.dart';
 
@@ -59,6 +60,7 @@ class EntryScreen extends StatefulWidget {
 
 class _EntryScreenState extends State<EntryScreen> {
   final AuthService _authService = AuthService();
+  final FavoritesService _favoritesService = FavoritesService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final LocationService _locationService = LocationService();
   final TextEditingController searchController = TextEditingController();
@@ -70,12 +72,79 @@ class _EntryScreenState extends State<EntryScreen> {
   double? _userLongitude;
   bool _locationLoading = true;
   String? _locationError;
+  Set<String> _favoriteRestaurantIds = <String>{};
 
   @override
   void initState() {
     super.initState();
     _loadUserLocation();
     _loadRestaurants();
+    _loadFavoriteRestaurants();
+  }
+
+  Future<void> _loadFavoriteRestaurants() async {
+    final favorites = await _favoritesService.getFavoriteRestaurants();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _favoriteRestaurantIds = favorites
+          .map((f) => (f['id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    });
+  }
+
+  Future<void> _toggleRestaurantFavorite(Restaurant restaurant) async {
+    final user = _authService.getCurrentUser();
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to save favorites.')),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final isFavorite = _favoriteRestaurantIds.contains(restaurant.id);
+    try {
+      if (isFavorite) {
+        await _favoritesService.removeRestaurantFavorite(restaurant.id);
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _favoriteRestaurantIds.remove(restaurant.id);
+        });
+      } else {
+        await _favoritesService.addRestaurantFavorite(
+          restaurant.id,
+          restaurant.name,
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _favoriteRestaurantIds.add(restaurant.id);
+        });
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isFavorite
+                ? 'Removed from favorites.'
+                : 'Added to favorites.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to update favorite: $e')),
+      );
+    }
   }
 
   Future<void> _loadUserLocation() async {
@@ -148,17 +217,64 @@ class _EntryScreenState extends State<EntryScreen> {
 
   final List<Map<String, String>> categories = [
     {
-      'name': 'Pizzas',
-      'image': 'https://via.placeholder.com/80x80?text=Pizzas',
+      'name': 'Pizza',
+      'cuisine': 'Italian',
+      'keyword': 'pizza',
+      'image': 'https://via.placeholder.com/80x80?text=Pizza',
     },
-    {'name': 'Dosa', 'image': 'https://via.placeholder.com/80x80?text=Dosa'},
+    {
+      'name': 'Burger',
+      'cuisine': 'American',
+      'keyword': 'burger',
+      'image': 'https://via.placeholder.com/80x80?text=Burger',
+    },
+    {
+      'name': 'Dosa',
+      'cuisine': 'Indian',
+      'keyword': 'dosa',
+      'image': 'https://via.placeholder.com/80x80?text=Dosa',
+    },
+    {
+      'name': 'Biryani',
+      'cuisine': 'Indian',
+      'keyword': 'biryani',
+      'image': 'https://via.placeholder.com/80x80?text=Biryani',
+    },
     {
       'name': 'Shawarma',
+      'cuisine': 'All',
+      'keyword': 'shawarma',
       'image': 'https://via.placeholder.com/80x80?text=Shawarma',
     },
-    {'name': 'Cakes', 'image': 'https://via.placeholder.com/80x80?text=Cakes'},
-    {'name': 'Idli', 'image': 'https://via.placeholder.com/80x80?text=Idli'},
+    {
+      'name': 'Idli',
+      'cuisine': 'Indian',
+      'keyword': 'idli',
+      'image': 'https://via.placeholder.com/80x80?text=Idli',
+    },
+    {
+      'name': 'Cake',
+      'cuisine': 'All',
+      'keyword': 'cake',
+      'image': 'https://via.placeholder.com/80x80?text=Cake',
+    },
+    {
+      'name': 'Parotta',
+      'cuisine': 'Indian',
+      'keyword': 'parotta',
+      'image': 'https://via.placeholder.com/80x80?text=Parotta',
+    },
   ];
+
+  void _applyMindCategory(Map<String, String> category) {
+    final cuisine = category['cuisine'] ?? 'All';
+    setState(() {
+      selectedFilter = cuisine;
+      // Keep category filtering independent from typed search
+      // so options like Pizza/Burger always show mapped cuisine results.
+      searchController.clear();
+    });
+  }
 
   List<Restaurant> getFilteredRestaurants() {
     List<Restaurant> filtered = restaurants;
@@ -274,20 +390,8 @@ class _EntryScreenState extends State<EntryScreen> {
                   setState(() {});
                 },
                 decoration: InputDecoration(
-                  hintText: "Search for 'Cake'",
+                  hintText: "Search for 'Restaurant'",
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  suffixIcon: Container(
-                    margin: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.mic,
-                      color: Colors.red.shade600,
-                      size: 20,
-                    ),
-                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: Colors.grey[300]!),
@@ -480,42 +584,46 @@ class _EntryScreenState extends State<EntryScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: categories.length,
                 itemBuilder: (context, index) {
+                  final category = categories[index];
                   return Column(
                     children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withValues(alpha: 0.2),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+                      GestureDetector(
+                        onTap: () => _applyMindCategory(category),
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withValues(alpha: 0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              category['image']!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.grey[300],
+                                  child: Icon(
+                                    Icons.restaurant_menu,
+                                    color: Colors.grey[600],
+                                  ),
+                                );
+                              },
                             ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            categories[index]['image']!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[300],
-                                child: Icon(
-                                  Icons.restaurant_menu,
-                                  color: Colors.grey[600],
-                                ),
-                              );
-                            },
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        categories[index]['name']!,
+                        category['name']!,
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -530,7 +638,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
             const SizedBox(height: 24),
 
-            // Filter, Sort, Store, Offers
+            /* // Filter, Sort, Store, Offers
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -550,8 +658,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                 ],
               ),
-            ),
-
+            ),*/
             const SizedBox(height: 24),
 
             // Restaurants to explore section with filter chips and list
@@ -639,37 +746,6 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label) {
-    return OutlinedButton(
-      onPressed: () {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$label tapped')));
-      },
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.grey[300]!),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.grey[600], size: 20),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[700],
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFilterChip(String label) {
     final isSelected = selectedFilter == label;
     return FilterChip(
@@ -693,6 +769,7 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Widget _buildRestaurantCard(Restaurant restaurant) {
+    final isFavorite = _favoriteRestaurantIds.contains(restaurant.id);
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
@@ -815,7 +892,16 @@ class _EntryScreenState extends State<EntryScreen> {
                           ),
                         ],
                       ),
-                      Icon(Icons.favorite_border, color: Colors.grey[400]),
+                      IconButton(
+                        onPressed: () => _toggleRestaurantFavorite(restaurant),
+                        icon: Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: isFavorite ? Colors.red : Colors.grey[400],
+                        ),
+                        tooltip: isFavorite
+                            ? 'Remove from favorites'
+                            : 'Add to favorites',
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -917,7 +1003,6 @@ class _EntryScreenState extends State<EntryScreen> {
       ),
     );
   }
-
   @override
   void dispose() {
     searchController.dispose();
