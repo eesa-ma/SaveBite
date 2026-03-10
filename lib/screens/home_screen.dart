@@ -125,6 +125,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadUserLocation();
   }
 
+
+
   Future<void> _loadUserLocation() async {
     try {
       final location = await _locationService.getCurrentLocation();
@@ -230,6 +232,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: InputDecoration(
                   hintText: 'Search restaurants...',
                   prefixIcon: const Icon(Icons.search),
+                  suffixIcon: searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            setState(() {
+                              searchController.clear();
+                            });
+                          },
+                        )
+                      : null,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -271,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 16),
 
-            // Restaurants List
+            // Search Results
             if (filteredRestaurants.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(32.0),
@@ -291,6 +303,33 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      searchController.text.isNotEmpty
+                          ? 'Try a different search term'
+                          : 'Try a different cuisine type',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (searchController.text.isNotEmpty ||
+                        selectedFilter != 'All')
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            searchController.clear();
+                            selectedFilter = 'All';
+                          });
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Clear Filters'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                   ],
                 ),
               )
@@ -394,6 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
+
                 // Rating Badge
                 Positioned(
                   bottom: 12,

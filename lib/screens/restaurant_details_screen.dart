@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:save_bite/models/food_item.dart';
 import 'package:save_bite/screens/checkout_screen.dart';
+import 'package:save_bite/services/favorites_service.dart';
 import '../services/location_service.dart';
 
 class RestaurantDetailsScreen extends StatefulWidget {
@@ -26,6 +27,8 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   );
   final ValueNotifier<Map<String, int>> _cartItems =
       ValueNotifier<Map<String, int>>({});
+  final FavoritesService _favoritesService = FavoritesService();
+  Set<String> _favoritedItems = {};
   String _searchQuery = '';
   String _selectedCategory = 'All';
   
@@ -36,6 +39,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   double? _restaurantLongitude;
   String? _restaurantAddress;
 
+  // Stream for food items - created once to prevent rebuilds
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _itemsStream;
+
   static const Color _primaryColor = Color(0xFF2E7D32);
   static const Color _lightGrey = Color(0xFFF5F5F5);
   static const Color _mediumGrey = Color(0xFFBDBDBD);
@@ -44,6 +50,63 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   void initState() {
     super.initState();
     _loadLocationData();
+    _loadFavorites();
+    _initializeStream();
+  }
+
+  void _initializeStream() {
+    _itemsStream = FirebaseFirestore.instance
+        .collection('foodItems')
+        .where('restaurantId', isEqualTo: widget.restaurantId)
+        .where('isAvailable', isEqualTo: true)
+        .where('quantityAvailable', isGreaterThan: 0)
+        .orderBy('quantityAvailable')
+        .snapshots();
+  }
+
+  Future<void> _loadFavorites() async {
+    final favorites = await _favoritesService.getFavoriteFoodItems();
+    setState(() {
+      _favoritedItems = {
+        for (var fav in favorites) fav['id'] as String
+      };
+    });
+  }
+
+  Future<void> _toggleFoodItemFavorite(FoodItem item) async {
+    try {
+      if (_favoritedItems.contains(item.id)) {
+        await _favoritesService.removeFoodItemFavorite(item.id);
+        setState(() {
+          _favoritedItems.remove(item.id);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${item.name} removed from favorites')),
+          );
+        }
+      } else {
+        await _favoritesService.addFoodItemFavorite(
+          widget.restaurantId,
+          item.id,
+          item.name,
+        );
+        setState(() {
+          _favoritedItems.add(item.id);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${item.name} added to favorites')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _loadLocationData() async {
@@ -118,20 +181,14 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       _cartItems.value.values.fold(0, (sum, qty) => sum + qty);
 
   @override
+  @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final itemsStream = FirebaseFirestore.instance
-        .collection('foodItems')
-        .where('restaurantId', isEqualTo: widget.restaurantId)
-        .where('isAvailable', isEqualTo: true)
-        .where('quantityAvailable', isGreaterThan: 0)
-        .orderBy('quantityAvailable')
-        .snapshots();
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: itemsStream,
+        stream: _itemsStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return _buildErrorState();
@@ -150,13 +207,20 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             return _buildEmptyState();
           }
 
-          // Filter items
+          // Filter items by search query and category
           final filteredItems = items
-              .where(
-                (item) => item.name.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ),
-              )
+              .where((item) {
+                // Filter by search query
+                final matchesSearch = item.name.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    );
+                
+                // Filter by category
+                final matchesCategory = _selectedCategory == 'All' ||
+                    item.description == _selectedCategory;
+                
+                return matchesSearch && matchesCategory;
+              })
               .toList();
 
           final categories = [
@@ -192,7 +256,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           final count = _getCartCount();
           return count == 0
               ? const SizedBox.shrink()
-              : _buildCartFAB(count, itemsStream);
+              : _buildCartFAB(count);
         },
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -254,6 +318,14 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         decoration: InputDecoration(
           hintText: 'Search for items...',
           prefixIcon: const Icon(Icons.search, color: _mediumGrey),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: _mediumGrey),
+                  onPressed: () {
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(color: _lightGrey),
@@ -267,20 +339,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           fillColor: _lightGrey,
         ),
       ),
-    );
-  }
-
-  Widget _buildInfoItem(String icon, String value, String label) {
-    return Column(
-      children: [
-        Text(icon, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-        ),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-      ],
     );
   }
 
@@ -318,6 +376,37 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Widget _buildFoodsList(List<FoodItem> items, User? user) {
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No items found',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _searchQuery.isNotEmpty
+                  ? 'Try a different search'
+                  : 'Try a different category',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -361,12 +450,31 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _toggleFoodItemFavorite(item),
+                        child: Icon(
+                          _favoritedItems.contains(item.id)
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          color: Colors.red,
+                          size: 18,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -390,6 +498,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             // Add/Remove buttons
             ValueListenableBuilder<Map<String, int>>(
               valueListenable: _cartItems,
@@ -465,12 +574,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
-  Widget _buildCartFAB(
-    int count,
-    Stream<QuerySnapshot<Map<String, dynamic>>> itemsStream,
-  ) {
+  Widget _buildCartFAB(int count) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: itemsStream,
+      stream: _itemsStream,
       builder: (context, snapshot) {
         final docs = snapshot.data?.docs ?? [];
         final items = docs.map(FoodItem.fromDoc).toList();
