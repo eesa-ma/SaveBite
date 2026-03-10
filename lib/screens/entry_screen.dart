@@ -981,6 +981,25 @@ class _EntryScreenState extends State<EntryScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
+                          if (restaurant.rating > 0)
+                            Row(
+                              children: List.generate(5, (i) {
+                                final full = i < restaurant.rating.floor();
+                                final half = !full &&
+                                    i < restaurant.rating &&
+                                    (restaurant.rating - i) >= 0.5;
+                                return Icon(
+                                  full
+                                      ? Icons.star
+                                      : half
+                                          ? Icons.star_half
+                                          : Icons.star_border,
+                                  color: Colors.amber,
+                                  size: 14,
+                                );
+                              }),
+                            ),
+                          const SizedBox(height: 2),
                           Text(
                             restaurant.cuisine,
                             style: TextStyle(

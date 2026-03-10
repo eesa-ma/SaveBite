@@ -3223,6 +3223,39 @@ class _OrderHistorySheet extends StatefulWidget {
 class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   String _filterType = 'completed'; // completed, cancelled, all
 
+  // Stable stream references — created once per filter value
+  late Stream<Map<String, Map<String, dynamic>>> _reviewsStream;
+  late Stream<QuerySnapshot> _ordersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _reviewsStream = _buildReviewsStream();
+    _ordersStream = _buildOrdersStream();
+  }
+
+  @override
+  void didUpdateWidget(_OrderHistorySheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.restaurantId != widget.restaurantId) {
+      _reviewsStream = _buildReviewsStream();
+      _ordersStream = _buildOrdersStream();
+    }
+  }
+
+  Stream<Map<String, Map<String, dynamic>>> _buildReviewsStream() {
+    return FirebaseFirestore.instance
+        .collection('reviews')
+        .where('restaurantId', isEqualTo: widget.restaurantId)
+        .snapshots()
+        .map(
+          (snap) => {
+            for (final doc in snap.docs)
+              (doc.data()['orderId'] as String? ?? ''): doc.data(),
+          },
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
@@ -3286,148 +3319,229 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                   ],
                 ),
               ),
-              // Orders list
+              // Orders list wrapped with reviews stream
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: _getOrdersStream(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF4CAF50),
-                        ),
-                      );
-                    }
-
-                    if (snapshot.hasError) {
-                      return Center(child: Text('Error: ${snapshot.error}'));
-                    }
-
-                    final docs = snapshot.data?.docs ?? [];
-
-                    if (docs.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.history,
-                              size: 48,
-                              color: Colors.grey[300],
+                child: StreamBuilder<Map<String, Map<String, dynamic>>>(
+                  stream: _reviewsStream,
+                  builder: (context, reviewsSnap) {
+                    final reviewsMap = reviewsSnap.data ?? {};
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: _ordersStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                                ConnectionState.waiting &&
+                            !snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF4CAF50),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No orders found',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[500],
-                              ),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text('Error: ${snapshot.error}'),
+                          );
+                        }
+
+                        final docs = snapshot.data?.docs ?? [];
+
+                        if (docs.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.history,
+                                  size: 48,
+                                  color: Colors.grey[300],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No orders found',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[500],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    }
+                          );
+                        }
 
-                    return ListView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        final doc = docs[index];
-                        final data = doc.data() as Map<String, dynamic>;
-                        final status = data['status'] ?? 'unknown';
-                        final foodName = data['foodName'] ?? 'Item';
-                        final quantity =
-                            (data['quantity'] as num?)?.toInt() ?? 1;
-                        final price = (data['price'] as num?)?.toDouble() ?? 0;
-                        final createdAt = data['createdAt'] as Timestamp?;
-                        final timestamp = createdAt?.toDate() ?? DateTime.now();
-
-                        final statusColor = status == 'cancelled'
-                            ? Colors.red
-                            : Colors.green;
-                        final statusLabel = status == 'cancelled'
-                            ? 'Cancelled'
-                            : 'Completed';
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
+                        return ListView.builder(
+                          controller: scrollController,
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey[200]!),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      foodName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            final doc = docs[index];
+                            final data = doc.data() as Map<String, dynamic>;
+                            final status = data['status'] ?? 'unknown';
+                            final foodName = data['foodName'] ?? 'Item';
+                            final quantity =
+                                (data['quantity'] as num?)?.toInt() ?? 1;
+                            final price =
+                                (data['price'] as num?)?.toDouble() ?? 0;
+                            final createdAt = data['createdAt'] as Timestamp?;
+                            final timestamp =
+                                createdAt?.toDate() ?? DateTime.now();
+                            final customerName =
+                                data['customerName'] ?? 'Customer';
+
+                            final statusColor =
+                                status == 'cancelled' ? Colors.red : Colors.green;
+                            final statusLabel =
+                                status == 'cancelled' ? 'Cancelled' : 'Completed';
+
+                            // Lookup review for this order
+                            final review = reviewsMap[doc.id];
+                            final reviewRating =
+                                (review?['rating'] as num?)?.toInt() ?? 0;
+
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.white,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(24),
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: statusColor.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      statusLabel,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: statusColor,
-                                      ),
-                                    ),
+                                  builder: (_) => _HistoryOrderDetailsSheet(
+                                    orderId: doc.id,
+                                    orderData: data,
+                                    review: review,
                                   ),
-                                ],
+                                );
+                              },
+                              child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey[200]!),
                               ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          foodName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          statusLabel,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
                                   Text(
-                                    'Qty: $quantity × ₹${price.toStringAsFixed(0)}',
+                                    customerName,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey[600],
+                                      color: Colors.grey[700],
                                     ),
                                   ),
-                                  Text(
-                                    'Total: ₹${(price * quantity).toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF4CAF50),
-                                    ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Qty: $quantity × ₹${price.toStringAsFixed(0)}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      Text(
+                                        'Total: ₹${(price * quantity).toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF4CAF50),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        _formatDateTime(timestamp),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey[500],
+                                        ),
+                                      ),
+                                      if (review != null)
+                                        Row(
+                                          children: [
+                                            ...List.generate(
+                                              5,
+                                              (i) => Icon(
+                                                i < reviewRating
+                                                    ? Icons.star
+                                                    : Icons.star_border,
+                                                color: Colors.amber,
+                                                size: 13,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 16,
+                                              color: Colors.grey,
+                                            ),
+                                          ],
+                                        )
+                                      else
+                                        const Icon(
+                                          Icons.chevron_right,
+                                          size: 16,
+                                          color: Colors.grey,
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _formatDateTime(timestamp),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                            );
+                          },
                         );
                       },
                     );
@@ -3444,7 +3558,12 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   Widget _buildFilterTab(String label, String value) {
     final isSelected = _filterType == value;
     return GestureDetector(
-      onTap: () => setState(() => _filterType = value),
+      onTap: () {
+        setState(() {
+          _filterType = value;
+          _ordersStream = _buildOrdersStream();
+        });
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
@@ -3465,7 +3584,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     );
   }
 
-  Stream<QuerySnapshot> _getOrdersStream() {
+  Stream<QuerySnapshot> _buildOrdersStream() {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('orders')
         .where('restaurantId', isEqualTo: widget.restaurantId);
@@ -3498,5 +3617,312 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+  }
+}
+
+class _HistoryOrderDetailsSheet extends StatelessWidget {
+  const _HistoryOrderDetailsSheet({
+    required this.orderId,
+    required this.orderData,
+    required this.review,
+  });
+
+  final String orderId;
+  final Map<String, dynamic> orderData;
+  final Map<String, dynamic>? review;
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foodName = orderData['foodName'] ?? 'Item';
+    final quantity = (orderData['quantity'] as num?)?.toInt() ?? 1;
+    final price = (orderData['price'] as num?)?.toDouble() ?? 0.0;
+    final customerName = orderData['customerName'] ?? 'Customer';
+    final customerPhone = orderData['customerPhone'] ?? 'N/A';
+    final deliveryAddress = orderData['deliveryAddress'] ?? 'N/A';
+    final status = orderData['status'] ?? 'pickedUp';
+    final createdAt = orderData['createdAt'] as Timestamp?;
+    final timestamp = createdAt?.toDate() ?? DateTime.now();
+    final total = price * quantity;
+
+    final statusColor = status == 'cancelled' ? Colors.red : Colors.green;
+    final statusLabel = status == 'cancelled' ? 'Cancelled' : 'Completed';
+
+    final reviewRating = (review?['rating'] as num?)?.toInt() ?? 0;
+    final reviewComment = (review?['comment'] as String? ?? '').trim();
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 16,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              // Title row
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      foodName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Placed ${_formatDateTime(timestamp)}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              // Customer details
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.06),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Customer Details',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('Name: $customerName',
+                        style: const TextStyle(fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Text('Phone: $customerPhone',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+                    const SizedBox(height: 6),
+                    Text('Pickup: $deliveryAddress',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Order item
+              const Text('Items',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.04),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$quantity',
+                        style:
+                            const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        foodName,
+                        style:
+                            const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Text(
+                      '₹${total.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.06),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Total',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '₹${total.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Review section
+              if (review != null) ...[
+                const SizedBox(height: 20),
+                const Text(
+                  'Customer Review',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.amber[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber[200]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stars
+                      Row(
+                        children: [
+                          ...List.generate(
+                            5,
+                            (i) => Icon(
+                              i < reviewRating
+                                  ? Icons.star
+                                  : Icons.star_border,
+                              color: Colors.amber,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            ['', 'Poor', 'Fair', 'Good', 'Very Good',
+                                'Excellent'][reviewRating.clamp(0, 5)],
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (reviewComment.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          '"$reviewComment"',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[800],
+                            fontStyle: FontStyle.italic,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ] else if (status == 'pickedUp') ...[
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.rate_review_outlined,
+                          color: Colors.grey[400], size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'No review yet',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

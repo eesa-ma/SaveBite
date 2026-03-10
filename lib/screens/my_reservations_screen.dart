@@ -649,6 +649,29 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       batch.update(orderRef, {'reviewed': true, 'rating': rating});
 
       await batch.commit();
+
+      // Update the restaurant's average rating atomically
+      final restaurantId = (orderData['restaurantId'] ?? '') as String;
+      if (restaurantId.isNotEmpty) {
+        final restaurantRef = FirebaseFirestore.instance
+            .collection('restaurants')
+            .doc(restaurantId);
+        await FirebaseFirestore.instance.runTransaction((txn) async {
+          final snap = await txn.get(restaurantRef);
+          final d = snap.data() ?? {};
+          final oldCount = (d['reviewCount'] as num?)?.toInt() ?? 0;
+          final oldAvg = (d['rating'] as num?)?.toDouble() ?? 0.0;
+          final oldSum = oldAvg * oldCount;
+          final newCount = oldCount + 1;
+          final newAvg =
+              double.parse(((oldSum + rating) / newCount).toStringAsFixed(1));
+          txn.update(restaurantRef, {
+            'reviewCount': newCount,
+            'rating': newAvg,
+          });
+        });
+      }
+
       return true;
     } catch (_) {
       return false;
