@@ -9,24 +9,20 @@ import '../services/location_service.dart';
 class Restaurant {
   final String id;
   final String name;
-  final String cuisine;
   final double rating;
   final int reviews;
   final String imageUrl;
   final bool isOpen;
-  final String deliveryTime;
   final double? latitude;
   final double? longitude;
 
   Restaurant({
     required this.id,
     required this.name,
-    required this.cuisine,
     required this.rating,
     required this.reviews,
     required this.imageUrl,
     required this.isOpen,
-    required this.deliveryTime,
     required this.latitude,
     required this.longitude,
   });
@@ -38,14 +34,12 @@ class Restaurant {
     return Restaurant(
       id: doc.id,
       name: data['name'] ?? 'Unknown Restaurant',
-      cuisine: data['cuisine'] ?? 'General',
       rating: (data['rating'] ?? 0).toDouble(),
       reviews: data['reviews'] ?? 0,
       imageUrl:
           data['imageUrl'] ??
           'https://via.placeholder.com/300x200?text=Restaurant',
       isOpen: data['isOpen'] ?? true,
-      deliveryTime: data['deliveryTime'] ?? 'N/A',
       latitude: latitudeValue is num ? latitudeValue.toDouble() : null,
       longitude: longitudeValue is num ? longitudeValue.toDouble() : null,
     );
@@ -326,8 +320,6 @@ class _EntryScreenState extends State<EntryScreen> {
       filtered = filtered
           .where((r) => _categoryRestaurantIds!.contains(r.id))
           .toList();
-    } else if (selectedFilter != 'All') {
-      filtered = filtered.where((r) => r.cuisine == selectedFilter).toList();
     }
 
     if (searchController.text.isNotEmpty) {
@@ -766,7 +758,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   children: [
                     _buildFilterChip('All'),
                     const SizedBox(width: 8),
-                    _buildFilterChip('American'),
+                    /*_buildFilterChip('American'),
                     const SizedBox(width: 8),
                     _buildFilterChip('Italian'),
                     const SizedBox(width: 8),
@@ -776,7 +768,7 @@ class _EntryScreenState extends State<EntryScreen> {
                     const SizedBox(width: 8),
                     _buildFilterChip('Mexican'),
                     const SizedBox(width: 8),
-                    _buildFilterChip('Chinese'),
+                    _buildFilterChip('Chinese'),*/
                   ],
                 ),
               ),
@@ -999,14 +991,6 @@ class _EntryScreenState extends State<EntryScreen> {
                                 );
                               }),
                             ),
-                          const SizedBox(height: 2),
-                          Text(
-                            restaurant.cuisine,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
                         ],
                       ),
                       IconButton(
@@ -1061,23 +1045,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.schedule,
-                            size: 16,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            restaurant.deliveryTime,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
+                      const SizedBox.shrink(),
                       ElevatedButton(
                         onPressed: restaurant.isOpen
                             ? () {

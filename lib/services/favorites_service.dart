@@ -149,25 +149,20 @@ class FavoritesService {
     final user = _auth.currentUser;
     if (user == null) return [];
 
-    try {
-      final doc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('favorites')
-          .doc('restaurants')
-          .get();
+    final doc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('favorites')
+        .doc('restaurants')
+        .get();
 
-      if (doc.exists) {
-        final data = doc.data() ?? {};
-        return data.entries
-            .map((e) => {'id': e.key, 'name': e.value})
-            .toList();
-      }
-      return [];
-    } catch (e) {
-      debugPrint('Error getting favorite restaurants: $e');
-      return [];
+    if (doc.exists) {
+      final data = doc.data() ?? {};
+      return data.entries
+          .map((e) => {'id': e.key, 'name': e.value})
+          .toList();
     }
+    return [];
   }
 
   // Get all favorite food items
@@ -175,28 +170,23 @@ class FavoritesService {
     final user = _auth.currentUser;
     if (user == null) return [];
 
-    try {
-      final doc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('favorites')
-          .doc('items')
-          .get();
+    final doc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('favorites')
+        .doc('items')
+        .get();
 
-      if (doc.exists) {
-        final data = doc.data() ?? {};
-        return data.entries
-            .map((e) => {
-              'id': e.key,
-              'name': e.value['name'],
-              'restaurantId': e.value['restaurantId'],
-            })
-            .toList();
-      }
-      return [];
-    } catch (e) {
-      debugPrint('Error getting favorite food items: $e');
-      return [];
+    if (doc.exists) {
+      final data = doc.data() ?? {};
+      return data.entries
+          .map((e) => {
+            'id': e.key,
+            'name': e.value['name'],
+            'restaurantId': e.value['restaurantId'],
+          })
+          .toList();
     }
+    return [];
   }
 }

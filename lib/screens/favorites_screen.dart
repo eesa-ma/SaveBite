@@ -16,6 +16,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
   late final TabController _tabController;
 
   bool _isLoading = true;
+  String? _error;
   List<Map<String, dynamic>> _favoriteRestaurants = [];
   List<Map<String, dynamic>> _favoriteItems = [];
 
@@ -35,20 +36,25 @@ class _FavoritesScreenState extends State<FavoritesScreen>
   Future<void> _loadFavorites() async {
     setState(() {
       _isLoading = true;
+      _error = null;
     });
 
-    final restaurants = await _favoritesService.getFavoriteRestaurants();
-    final items = await _favoritesService.getFavoriteFoodItems();
-
-    if (!mounted) {
-      return;
+    try {
+      final restaurants = await _favoritesService.getFavoriteRestaurants();
+      final items = await _favoritesService.getFavoriteFoodItems();
+      if (!mounted) return;
+      setState(() {
+        _favoriteRestaurants = restaurants;
+        _favoriteItems = items;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
     }
-
-    setState(() {
-      _favoriteRestaurants = restaurants;
-      _favoriteItems = items;
-      _isLoading = false;
-    });
   }
 
   Future<void> _removeRestaurantFavorite(String restaurantId) async {
@@ -229,6 +235,39 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Could not load favourites',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _loadFavorites,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : TabBarView(
               controller: _tabController,
               children: [
@@ -256,15 +295,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                       ),
               ],
             ),
-      bottomNavigationBar: Container(
-        color: colors.surfaceContainerHighest,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Text(
-          'Tip: Tap any card to open its restaurant',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
-        ),
-      ),
+
     );
   }
 }
