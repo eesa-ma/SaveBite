@@ -220,8 +220,6 @@ class _FavoritesScreenState extends State<FavoritesScreen>
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Favorites'),
