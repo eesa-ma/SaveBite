@@ -115,7 +115,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           return const Center(
             child: CircularProgressIndicator(
               color: MyReservationsScreen._primaryColor,
-            ),
+              ),
           );
         }
 
@@ -126,8 +126,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.receipt_long,
-                    size: 64, color: Colors.grey[300]),
+                Icon(Icons.receipt_long, size: 64, color: Colors.grey[300]),
                 const SizedBox(height: 16),
                 const Text(
                   'No active orders',
@@ -149,7 +148,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           itemBuilder: (context, index) {
             final order = docs[index];
             final data = order.data();
-            return _buildOrderCard(data, context);
+            return _buildOrderCard(data, context, orderId: order.id);
           },
         );
       },
@@ -203,23 +202,32 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           itemBuilder: (context, index) {
             final order = docs[index];
             final data = order.data();
-            return _buildOrderCard(data, context, isHistory: true);
+            return _buildOrderCard(
+              data,
+              context,
+              isHistory: true,
+              orderId: order.id,
+            );
           },
         );
       },
     );
   }
 
-  Widget _buildOrderCard(Map<String, dynamic> data, BuildContext context,
-      {bool isHistory = false}) {
+  Widget _buildOrderCard(
+    Map<String, dynamic> data,
+    BuildContext context, {
+    bool isHistory = false,
+    String orderId = '',
+  }) {
+    final hasReview = data['reviewed'] == true;
     final foodName = data['foodName'] ?? 'Item';
     final quantity = (data['quantity'] is num)
         ? (data['quantity'] as num).toInt()
         : 1;
     final status = data['status'] ?? 'new';
     final createdAt = data['createdAt'];
-    final price = (data['price'] is num) ? (data['price'] as num) : 0.0;
-    final restaurantName = data['restaurantName'] ?? 'Restaurant';
+    final price   = (data['price'] is num) ? (data['price'] as num) : 0.0;
 
     final timestamp = createdAt is Timestamp
         ? createdAt.toDate()
@@ -269,7 +277,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -294,10 +302,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                 ),
                 Text(
                   _formatTime(timestamp),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
-                  ),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
             ),
@@ -326,20 +331,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            restaurantName,
+                            '$quantity item${quantity > 1 ? 's' : ''}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$quantity item${quantity > 1 ? 's' : ''}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[500],
                             ),
                           ),
                         ],
@@ -356,36 +351,6 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Order date
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: MyReservationsScreen._lightGrey,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Order Date',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        _formatFullDate(timestamp),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
                 // Timeline indicator
                 if (status == 'preparing' || status == 'ready')
                   Column(
@@ -397,9 +362,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           minHeight: 4,
                           backgroundColor: MyReservationsScreen._lightGrey,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            status == 'ready'
-                                ? Colors.green
-                                : Colors.orange,
+                            status == 'ready' ? Colors.green : Colors.orange,
                           ),
                         ),
                       ),
@@ -416,8 +379,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           icon: const Icon(Icons.info_outline, size: 16),
                           label: const Text('Details'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                MyReservationsScreen._primaryColor,
+                            foregroundColor: MyReservationsScreen._primaryColor,
                             side: const BorderSide(
                               color: MyReservationsScreen._primaryColor,
                             ),
@@ -439,12 +401,281 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                         ),
                     ],
                   ),
+                // Review button for picked-up orders
+                if (isHistory && status == 'pickedUp')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: hasReview
+                          ? OutlinedButton.icon(
+                              onPressed: null,
+                              icon: const Icon(Icons.star, size: 16),
+                              label: const Text('Reviewed'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.amber[700],
+                                side: BorderSide(color: Colors.amber[300]!),
+                              ),
+                            )
+                          : ElevatedButton.icon(
+                              onPressed: () =>
+                                  _showReviewDialog(context, orderId, data),
+                              icon: const Icon(Icons.star_border, size: 16),
+                              label: const Text('Write a Review'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    MyReservationsScreen._primaryColor,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _showReviewDialog(
+    BuildContext context,
+    String orderId,
+    Map<String, dynamic> orderData,
+  ) {
+    int selectedRating = 0;
+    final commentController = TextEditingController();
+    bool submitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'How was your order?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    orderData['foodName'] ?? 'Item',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 20),
+                  // Star rating
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) {
+                      final star = i + 1;
+                      return GestureDetector(
+                        onTap: () => setSheetState(() => selectedRating = star),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Icon(
+                            star <= selectedRating
+                                ? Icons.star
+                                : Icons.star_border,
+                            color: Colors.amber,
+                            size: 40,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      selectedRating == 0
+                          ? 'Tap a star to rate'
+                          : ['', 'Poor', 'Fair', 'Good', 'Very Good',
+                              'Excellent'][selectedRating],
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: selectedRating == 0
+                            ? Colors.grey
+                            : Colors.amber[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Comment field
+                  TextField(
+                    controller: commentController,
+                    maxLines: 3,
+                    maxLength: 300,
+                    decoration: InputDecoration(
+                      hintText: 'Tell us what you thought (optional)...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Color(0xFFF5F5F5)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Color(0xFFF5F5F5)),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF5F5F5),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: submitting || selectedRating == 0
+                          ? null
+                          : () async {
+                              setSheetState(() => submitting = true);
+                              final success = await _submitReview(
+                                orderId: orderId,
+                                orderData: orderData,
+                                rating: selectedRating,
+                                comment: commentController.text.trim(),
+                              );
+                              if (!sheetContext.mounted) return;
+                              Navigator.pop(sheetContext);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(success
+                                        ? 'Thanks for your review!'
+                                        : 'Could not submit review. Try again.'),
+                                    backgroundColor: success
+                                        ? MyReservationsScreen._primaryColor
+                                        : Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: MyReservationsScreen._primaryColor,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Submit Review',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _submitReview({
+    required String orderId,
+    required Map<String, dynamic> orderData,
+    required int rating,
+    required String comment,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      // Save review document
+      final reviewRef =
+          FirebaseFirestore.instance.collection('reviews').doc();
+      batch.set(reviewRef, {
+        'orderId': orderId,
+        'restaurantId': orderData['restaurantId'] ?? '',
+        'foodItemId': orderData['foodItemId'] ?? '',
+        'userId': user.uid,
+        'foodName': orderData['foodName'] ?? '',
+        'rating': rating,
+        'comment': comment,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Mark the order as reviewed
+      final orderRef =
+          FirebaseFirestore.instance.collection('orders').doc(orderId);
+      batch.update(orderRef, {'reviewed': true, 'rating': rating});
+
+      await batch.commit();
+
+      // Update the restaurant's average rating atomically
+      final restaurantId = (orderData['restaurantId'] ?? '') as String;
+      if (restaurantId.isNotEmpty) {
+        final restaurantRef = FirebaseFirestore.instance
+            .collection('restaurants')
+            .doc(restaurantId);
+        await FirebaseFirestore.instance.runTransaction((txn) async {
+          final snap = await txn.get(restaurantRef);
+          final d = snap.data() ?? {};
+          final oldCount = (d['reviewCount'] as num?)?.toInt() ?? 0;
+          final oldAvg = (d['rating'] as num?)?.toDouble() ?? 0.0;
+          final oldSum = oldAvg * oldCount;
+          final newCount = oldCount + 1;
+          final newAvg =
+              double.parse(((oldSum + rating) / newCount).toStringAsFixed(1));
+          txn.update(restaurantRef, {
+            'reviewCount': newCount,
+            'rating': newAvg,
+          });
+        });
+      }
+
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void _showOrderDetails(BuildContext context, Map<String, dynamic> order) {
@@ -480,7 +711,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: MyReservationsScreen._primaryColor,
                   ),
-                  child: const Text('Close', style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
             ],
@@ -496,10 +730,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
-          ),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           Text(
             value,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
@@ -518,9 +749,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Are you sure you want to cancel this order?',
-            ),
+            const Text('Are you sure you want to cancel this order?'),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -609,11 +838,16 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       if (user == null) throw Exception('User not authenticated');
 
       final foodItemId = orderData['foodItemId'] as String?;
-      final orderedQuantity = orderData['quantity'] as int?
-          ?? (orderData['quantity'] is num ? (orderData['quantity'] as num).toInt() : 1);
-      final foodName = orderData['foodName'] as String? ?? 'Item';
+      final orderedQuantity =
+          orderData['quantity'] as int? ??
+          (orderData['quantity'] is num
+              ? (orderData['quantity'] as num).toInt()
+              : 1);
+      final foodName = orderData['foodName'] as String? ?? 'Unknown Item';
 
-      if (foodItemId == null || foodItemId.isEmpty) {
+      if 
+         (foodItemId == null ||
+          foodItemId.isEmpty) {
         throw Exception('Invalid order data');
       }
 
@@ -652,8 +886,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         }
 
         // 2. Get the food item document
+          
         final foodRef =
-            FirebaseFirestore.instance.collection('foodItems').doc(foodItemId);
+            FirebaseFirestore.instance
+          .collection('foodItems')
+          .doc(foodItemId);
         final foodSnapshot = await transaction.get(foodRef);
 
         if (!foodSnapshot.exists) {
@@ -671,9 +908,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
 
         // 4. Update order status to cancelled
         transaction.update(orderRef, {
-          'status': 'cancelled',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        });
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+      });
 
         // 5. Restore food quantity and update availability
         transaction.update(foodRef, {
@@ -683,7 +920,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       });
 
       // Show success message
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -697,9 +934,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                     SizedBox(width: 12),
                     Text(
                       'Order cancelled successfully',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(  fontWeight: FontWeight.bold  ),
                     ),
                   ],
                 ),
@@ -717,7 +952,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       }
     } catch (e) {
       // Show error message
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -754,23 +989,5 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     } else {
       return '${diff.inDays}d ago';
     }
-  }
-
-  String _formatFullDate(DateTime dt) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }

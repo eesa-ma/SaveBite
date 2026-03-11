@@ -26,7 +26,7 @@ class AuthService {
       // Save user profile to Firestore
       if (credential.user != null) {
         // Set display name on Fire base User object
-        await credential.user!.updateProfile(displayName: name);
+        await credential.user!.updateDisplayName(name);
 
         await _firestore.collection('users').doc(credential.user!.uid).set({
           'uid': credential.user!.uid,
@@ -72,6 +72,11 @@ class AuthService {
     await _auth.signOut();
   }
 
+  // Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
   // Current User
   User? getCurrentUser() {
     return _auth.currentUser;
@@ -100,5 +105,26 @@ class AuthService {
       debugPrint('Error checking user in Firestore: $e');
       return false;
     }
+  }
+
+  // Update profile fields in both Auth and Firestore
+  Future<void> updateProfile({
+    required String name,
+    String? phone,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found.');
+    }
+
+    final normalizedName = name.trim();
+    final normalizedPhone = (phone ?? '').trim();
+
+    await user.updateDisplayName(normalizedName);
+    await _firestore.collection('users').doc(user.uid).set({
+      'name': normalizedName,
+      'phone': normalizedPhone,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

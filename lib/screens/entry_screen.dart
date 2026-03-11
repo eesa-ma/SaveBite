@@ -1,30 +1,28 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
+import 'package:save_bite/services/favorites_service.dart';
 import 'package:save_bite/screens/restaurant_details_screen.dart';
 import '../services/location_service.dart';
 
 class Restaurant {
   final String id;
   final String name;
-  final String cuisine;
   final double rating;
   final int reviews;
   final String imageUrl;
   final bool isOpen;
-  final String deliveryTime;
   final double? latitude;
   final double? longitude;
 
   Restaurant({
     required this.id,
     required this.name,
-    required this.cuisine,
     required this.rating,
     required this.reviews,
     required this.imageUrl,
     required this.isOpen,
-    required this.deliveryTime,
     required this.latitude,
     required this.longitude,
   });
@@ -36,14 +34,12 @@ class Restaurant {
     return Restaurant(
       id: doc.id,
       name: data['name'] ?? 'Unknown Restaurant',
-      cuisine: data['cuisine'] ?? 'General',
       rating: (data['rating'] ?? 0).toDouble(),
       reviews: data['reviews'] ?? 0,
       imageUrl:
           data['imageUrl'] ??
           'https://via.placeholder.com/300x200?text=Restaurant',
       isOpen: data['isOpen'] ?? true,
-      deliveryTime: data['deliveryTime'] ?? 'N/A',
       latitude: latitudeValue is num ? latitudeValue.toDouble() : null,
       longitude: longitudeValue is num ? longitudeValue.toDouble() : null,
     );
@@ -59,6 +55,7 @@ class EntryScreen extends StatefulWidget {
 
 class _EntryScreenState extends State<EntryScreen> {
   final AuthService _authService = AuthService();
+  final FavoritesService _favoritesService = FavoritesService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final LocationService _locationService = LocationService();
   final TextEditingController searchController = TextEditingController();
@@ -70,71 +67,58 @@ class _EntryScreenState extends State<EntryScreen> {
   double? _userLongitude;
   bool _locationLoading = true;
   String? _locationError;
+  Set<String> _favoriteRestaurantIds = <String>{};
+  Set<String>? _categoryRestaurantIds;
+  bool _categoryLoading = false;
+  String? _selectedMindCategory;
+  final Map<String, String> _distanceCache = {};
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    _loadUserLocation();
-    _loadRestaurants();
+    _initScreen();
   }
 
-  Future<void> _loadUserLocation() async {
+  Future<void> _initScreen() async {
+    final results = await Future.wait([
+      _fetchLocation(),
+      _fetchRestaurants(),
+      _fetchFavoriteRestaurants(),
+    ]);
+    if (!mounted) return;
+    final loc = results[0] as Map<String, dynamic>;
+    final rest = results[1] as List<Restaurant>;
+    final favs = results[2] as Set<String>;
+    setState(() {
+      _userLatitude = loc['lat'] as double?;
+      _userLongitude = loc['lng'] as double?;
+      _locationLoading = false;
+      _locationError = loc['error'] as String?;
+      restaurants = rest;
+      isLoadingRestaurants = false;
+      _favoriteRestaurantIds = favs;
+    });
+  }
+
+  Future<Map<String, dynamic>> _fetchLocation() async {
     try {
       final location = await _locationService.getCurrentLocation();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _userLatitude = location['latitude'] as double?;
-        _userLongitude = location['longitude'] as double?;
-        _locationLoading = false;
-        _locationError = null;
-      });
+      return {
+        'lat': location['latitude'] as double?,
+        'lng': location['longitude'] as double?,
+        'error': null,
+      };
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _locationLoading = false;
-        _locationError = 'Location unavailable';
-      });
+      return {'lat': null, 'lng': null, 'error': 'Location unavailable'};
     }
   }
 
-  String _getDistanceLabel(Restaurant restaurant) {
-    if (_locationLoading) {
-      return 'Detecting location...';
-    }
-    if (_locationError != null ||
-        _userLatitude == null ||
-        _userLongitude == null ||
-        restaurant.latitude == null ||
-        restaurant.longitude == null) {
-      return 'Location unavailable';
-    }
-
-    final distanceKm = _locationService.calculateDistance(
-      _userLatitude!,
-      _userLongitude!,
-      restaurant.latitude!,
-      restaurant.longitude!,
-    );
-    return _locationService.formatDistance(distanceKm);
-  }
-
-  Future<void> _loadRestaurants() async {
+  Future<List<Restaurant>> _fetchRestaurants() async {
     try {
       final snapshot = await _firestore.collection('restaurants').get();
-      setState(() {
-        restaurants = snapshot.docs
-            .map((doc) => Restaurant.fromFirestore(doc))
-            .toList();
-        isLoadingRestaurants = false;
-      });
+      return snapshot.docs.map((doc) => Restaurant.fromFirestore(doc)).toList();
     } catch (e) {
-      setState(() {
-        isLoadingRestaurants = false;
-      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -143,28 +127,199 @@ class _EntryScreenState extends State<EntryScreen> {
           ),
         );
       }
+      return [];
     }
+  }
+
+  Future<Set<String>> _fetchFavoriteRestaurants() async {
+    try {
+      final favorites = await _favoritesService.getFavoriteRestaurants();
+      return favorites
+          .map((f) => (f['id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _toggleRestaurantFavorite(Restaurant restaurant) async {
+    final user = _authService.getCurrentUser();
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to save favorites.')),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final isFavorite = _favoriteRestaurantIds.contains(restaurant.id);
+    try {
+      if (isFavorite) {
+        await _favoritesService.removeRestaurantFavorite(restaurant.id);
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _favoriteRestaurantIds.remove(restaurant.id);
+        });
+      } else {
+        await _favoritesService.addRestaurantFavorite(
+          restaurant.id,
+          restaurant.name,
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _favoriteRestaurantIds.add(restaurant.id);
+        });
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isFavorite
+                ? 'Removed from favorites.'
+                : 'Added to favorites.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to update favorite: $e')),
+      );
+    }
+  }
+
+  String _getDistanceLabel(Restaurant restaurant) {
+    if (_locationLoading) return 'Detecting location...';
+    final cached = _distanceCache[restaurant.id];
+    if (cached != null) return cached;
+    String result;
+    if (_locationError != null ||
+        _userLatitude == null ||
+        _userLongitude == null ||
+        restaurant.latitude == null ||
+        restaurant.longitude == null) {
+      result = 'Location unavailable';
+    } else {
+      final distanceKm = _locationService.calculateDistance(
+        _userLatitude!,
+        _userLongitude!,
+        restaurant.latitude!,
+        restaurant.longitude!,
+      );
+      result = _locationService.formatDistance(distanceKm);
+    }
+    _distanceCache[restaurant.id] = result;
+    return result;
   }
 
   final List<Map<String, String>> categories = [
     {
-      'name': 'Pizzas',
-      'image': 'https://via.placeholder.com/80x80?text=Pizzas',
+      'name': 'Pizza',
+      'cuisine': 'Italian',
+      'keyword': 'pizza',
+      'image': 'https://via.placeholder.com/80x80?text=Pizza',
     },
-    {'name': 'Dosa', 'image': 'https://via.placeholder.com/80x80?text=Dosa'},
+    {
+      'name': 'Burger',
+      'cuisine': 'American',
+      'keyword': 'burger',
+      'image': 'https://via.placeholder.com/80x80?text=Burger',
+    },
+    {
+      'name': 'Dosa',
+      'cuisine': 'Indian',
+      'keyword': 'dosa',
+      'image': 'https://via.placeholder.com/80x80?text=Dosa',
+    },
+    {
+      'name': 'Biryani',
+      'cuisine': 'Indian',
+      'keyword': 'biryani',
+      'image': 'https://via.placeholder.com/80x80?text=Biryani',
+    },
     {
       'name': 'Shawarma',
+      'cuisine': 'All',
+      'keyword': 'shawarma',
       'image': 'https://via.placeholder.com/80x80?text=Shawarma',
     },
-    {'name': 'Cakes', 'image': 'https://via.placeholder.com/80x80?text=Cakes'},
-    {'name': 'Idli', 'image': 'https://via.placeholder.com/80x80?text=Idli'},
+    {
+      'name': 'Idli',
+      'cuisine': 'Indian',
+      'keyword': 'idli',
+      'image': 'https://via.placeholder.com/80x80?text=Idli',
+    },
+    {
+      'name': 'Cake',
+      'cuisine': 'All',
+      'keyword': 'cake',
+      'image': 'https://via.placeholder.com/80x80?text=Cake',
+    },
+    {
+      'name': 'Parotta',
+      'cuisine': 'Indian',
+      'keyword': 'parotta',
+      'image': 'https://via.placeholder.com/80x80?text=Parotta',
+    },
   ];
+
+  void _applyMindCategory(Map<String, String> category) async {
+    final keyword = category['keyword'] ?? '';
+    if (keyword.isEmpty) return;
+
+    // Deselect if already active
+    if (_selectedMindCategory == category['name']) {
+      setState(() {
+        _selectedMindCategory = null;
+        _categoryRestaurantIds = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _categoryLoading = true;
+      _categoryRestaurantIds = null;
+      _selectedMindCategory = category['name'];
+      selectedFilter = 'All';
+      searchController.clear();
+    });
+    try {
+      final snapshot = await _firestore.collection('foodItems').get();
+      final ids = snapshot.docs
+          .where((doc) {
+            final name = (doc.data()['name'] ?? '').toString().toLowerCase();
+            return name.contains(keyword.toLowerCase());
+          })
+          .map((doc) => (doc.data()['restaurantId'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      if (!mounted) return;
+      setState(() {
+        _categoryRestaurantIds = ids;
+        _categoryLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _categoryLoading = false;
+      });
+    }
+  }
 
   List<Restaurant> getFilteredRestaurants() {
     List<Restaurant> filtered = restaurants;
 
-    if (selectedFilter != 'All') {
-      filtered = filtered.where((r) => r.cuisine == selectedFilter).toList();
+    if (_categoryRestaurantIds != null) {
+      filtered = filtered
+          .where((r) => _categoryRestaurantIds!.contains(r.id))
+          .toList();
     }
 
     if (searchController.text.isNotEmpty) {
@@ -271,10 +426,24 @@ class _EntryScreenState extends State<EntryScreen> {
                   }
                 },
                 onChanged: (value) {
-                  setState(() {});
+                  _searchDebounce?.cancel();
+                  if (value.isEmpty) {
+                    setState(() {
+                      _categoryRestaurantIds = null;
+                      _selectedMindCategory = null;
+                    });
+                  } else {
+                    _searchDebounce = Timer(
+                      const Duration(milliseconds: 250),
+                      () => setState(() {
+                        _categoryRestaurantIds = null;
+                        _selectedMindCategory = null;
+                      }),
+                    );
+                  }
                 },
                 decoration: InputDecoration(
-                  hintText: "Search for 'Cake'",
+                  hintText: "Search for 'Restaurant'",
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -294,10 +463,323 @@ class _EntryScreenState extends State<EntryScreen> {
               ),
             ),
 
+            const SizedBox(height: 16),
+            /* 
+            // Scan a Heart Promotional Banner
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE91E63), Color(0xFFC2185B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '.Scan a Heart',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Spot a heart, scan it &\nwin exciting rewards!',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'PLAY & WIN',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.pink.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.favorite,
+                          size: 50,
+                          color: Colors.pink.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Free Cash Banner
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1A237E), Color(0xFF3F51B5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Use your ₹40 free cash',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'auto applied at checkout',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.amber, width: 3),
+                    ),
+                    child: const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'FREE',
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '₹40',
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+*/
+            // What's on your mind section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const Text(
+                "What's on your mind?",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Food Categories
+            SizedBox(
+              height: 120,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: categories.length,
+                itemBuilder: (context, index) {
+                  final category = categories[index];
+                  final isSelected =
+                      _selectedMindCategory == category['name'];
+                  return Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () => _applyMindCategory(category),
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected
+                                ? Border.all(
+                                    color: const Color(0xFF2E7D32),
+                                    width: 3,
+                                  )
+                                : null,
+                            boxShadow: [
+                              BoxShadow(
+                                color: isSelected
+                                    ? const Color(0xFF2E7D32)
+                                        .withValues(alpha: 0.35)
+                                    : Colors.grey.withValues(alpha: 0.2),
+                                blurRadius: isSelected ? 8 : 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(
+                              isSelected ? 9 : 12,
+                            ),
+                            child: Stack(
+                              children: [
+                                Image.network(
+                                  category['image']!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[300],
+                                      child: Icon(
+                                        Icons.restaurant_menu,
+                                        color: Colors.grey[600],
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    color: const Color(0xFF2E7D32)
+                                        .withValues(alpha: 0.25),
+                                    child: const Icon(
+                                      Icons.check_circle,
+                                      color: Colors.white,
+                                      size: 28,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        category['name']!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? const Color(0xFF2E7D32)
+                              : Colors.black,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            /* // Filter, Sort, Store, Offers
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(child: _buildActionButton(Icons.tune, 'Filter')),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildActionButton(Icons.arrow_downward, 'Sort by'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildActionButton(Icons.storefront, '99 Store'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildActionButton(Icons.local_offer, 'Offers'),
+                  ),
+                ],
+              ),
+            ),*/
+            const SizedBox(height: 24),
+
+            // Restaurants to explore section with filter chips and list
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip('All'),
+                    const SizedBox(width: 8),
+                    /*_buildFilterChip('American'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Italian'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Indian'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Japanese'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Mexican'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Chinese'),*/
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // Restaurants List
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: isLoadingRestaurants
+              child: (isLoadingRestaurants || _categoryLoading)
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(32.0),
@@ -352,37 +834,6 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label) {
-    return OutlinedButton(
-      onPressed: () {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$label tapped')));
-      },
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.grey[300]!),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.grey[600], size: 20),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[700],
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFilterChip(String label) {
     final isSelected = selectedFilter == label;
     return FilterChip(
@@ -391,6 +842,8 @@ class _EntryScreenState extends State<EntryScreen> {
       onSelected: (value) {
         setState(() {
           selectedFilter = label;
+          _categoryRestaurantIds = null;
+          _selectedMindCategory = null;
         });
       },
       backgroundColor: Colors.white,
@@ -406,6 +859,7 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Widget _buildRestaurantCard(Restaurant restaurant) {
+    final isFavorite = _favoriteRestaurantIds.contains(restaurant.id);
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
@@ -518,7 +972,36 @@ class _EntryScreenState extends State<EntryScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          if (restaurant.rating > 0)
+                            Row(
+                              children: List.generate(5, (i) {
+                                final full = i < restaurant.rating.floor();
+                                final half = !full &&
+                                    i < restaurant.rating &&
+                                    (restaurant.rating - i) >= 0.5;
+                                return Icon(
+                                  full
+                                      ? Icons.star
+                                      : half
+                                          ? Icons.star_half
+                                          : Icons.star_border,
+                                  color: Colors.amber,
+                                  size: 14,
+                                );
+                              }),
+                            ),
                         ],
+                      ),
+                      IconButton(
+                        onPressed: () => _toggleRestaurantFavorite(restaurant),
+                        icon: Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: isFavorite ? Colors.red : Colors.grey[400],
+                        ),
+                        tooltip: isFavorite
+                            ? 'Remove from favorites'
+                            : 'Add to favorites',
                       ),
                     ],
                   ),
@@ -546,16 +1029,19 @@ class _EntryScreenState extends State<EntryScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: restaurant.isOpen
-                          ? () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => RestaurantDetailsScreen(
-                                    restaurantId: restaurant.id,
-                                    restaurantName: restaurant.name,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const SizedBox.shrink(),
+                      ElevatedButton(
+                        onPressed: restaurant.isOpen
+                            ? () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => RestaurantDetailsScreen(
+                                      restaurantId: restaurant.id,
+                                      restaurantName: restaurant.name,
+                                    ),
                                   ),
                                 ),
                               );
@@ -589,9 +1075,9 @@ class _EntryScreenState extends State<EntryScreen> {
       ),
     );
   }
-
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     searchController.dispose();
     searchFocusNode.dispose();
     super.dispose();

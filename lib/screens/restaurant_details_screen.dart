@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -22,16 +23,18 @@ class RestaurantDetailsScreen extends StatefulWidget {
 }
 
 class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
+  final FavoritesService _favoritesService = FavoritesService();
   final ValueNotifier<Set<String>> _reservingIds = ValueNotifier<Set<String>>(
     {},
   );
   final ValueNotifier<Map<String, int>> _cartItems =
       ValueNotifier<Map<String, int>>({});
-  final FavoritesService _favoritesService = FavoritesService();
-  Set<String> _favoritedItems = {};
   String _searchQuery = '';
   String _selectedCategory = 'All';
-  
+  Set<String> _favoriteFoodItemIds = <String>{};
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+
   // Location data
   double? _userLatitude;
   double? _userLongitude;
@@ -39,73 +42,73 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   double? _restaurantLongitude;
   String? _restaurantAddress;
 
-  // Stream for food items - created once to prevent rebuilds
-  late Stream<QuerySnapshot<Map<String, dynamic>>> _itemsStream;
-
   static const Color _primaryColor = Color(0xFF2E7D32);
   static const Color _lightGrey = Color(0xFFF5F5F5);
   static const Color _mediumGrey = Color(0xFFBDBDBD);
 
   @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _reservingIds.dispose();
+    _cartItems.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     _loadLocationData();
-    _loadFavorites();
-    _initializeStream();
+    _loadFavoriteFoodItems();
   }
 
-  void _initializeStream() {
-    _itemsStream = FirebaseFirestore.instance
-        .collection('foodItems')
-        .where('restaurantId', isEqualTo: widget.restaurantId)
-        .where('isAvailable', isEqualTo: true)
-        .where('quantityAvailable', isGreaterThan: 0)
-        .orderBy('quantityAvailable')
-        .snapshots();
-  }
-
-  Future<void> _loadFavorites() async {
+  Future<void> _loadFavoriteFoodItems() async {
     final favorites = await _favoritesService.getFavoriteFoodItems();
+    if (!mounted) {
+      return;
+    }
     setState(() {
-      _favoritedItems = {
-        for (var fav in favorites) fav['id'] as String
-      };
+      _favoriteFoodItemIds = favorites
+          .map((item) => (item['id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
     });
   }
 
-  Future<void> _toggleFoodItemFavorite(FoodItem item) async {
+  Future<void> _toggleFoodFavorite(FoodItem item) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showSnackBar('Please sign in to add favorites.');
+      return;
+    }
+
+    final isFavorite = _favoriteFoodItemIds.contains(item.id);
     try {
-      if (_favoritedItems.contains(item.id)) {
+      if (isFavorite) {
         await _favoritesService.removeFoodItemFavorite(item.id);
-        setState(() {
-          _favoritedItems.remove(item.id);
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${item.name} removed from favorites')),
-          );
+        if (!mounted) {
+          return;
         }
+        setState(() {
+          _favoriteFoodItemIds.remove(item.id);
+        });
+        _showSnackBar('Removed from favorites.');
       } else {
         await _favoritesService.addFoodItemFavorite(
           widget.restaurantId,
           item.id,
           item.name,
         );
-        setState(() {
-          _favoritedItems.add(item.id);
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${item.name} added to favorites')),
-          );
+        if (!mounted) {
+          return;
         }
+        setState(() {
+          _favoriteFoodItemIds.add(item.id);
+        });
+        _showSnackBar('Added to favorites.');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      _showSnackBar('Could not update favorite: $e');
     }
   }
 
@@ -128,7 +131,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           .collection('restaurants')
           .doc(widget.restaurantId)
           .get();
-      
+
       if (restaurantDoc.exists) {
         final data = restaurantDoc.data();
         setState(() {
@@ -143,9 +146,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   String _getDistanceText() {
-    if (_userLatitude != null && 
-        _userLongitude != null && 
-        _restaurantLatitude != null && 
+    if (_userLatitude != null &&
+        _userLongitude != null &&
+        _restaurantLatitude != null &&
         _restaurantLongitude != null) {
       final locationService = LocationService();
       final distance = locationService.calculateDistance(
@@ -178,17 +181,32 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   int _getCartCount() =>
-      _cartItems.value.values.fold(0, (sum, qty) => sum + qty);
+      _cartItems.value.values.fold(0, (total, qty) => total + qty);
 
-  @override
+  void _showSnackBar(String message, {Color? backgroundColor}) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: backgroundColor),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final itemsStream = FirebaseFirestore.instance
+        .collection('foodItems')
+        .where('restaurantId', isEqualTo: widget.restaurantId)
+        .where('isAvailable', isEqualTo: true)
+        .where('quantityAvailable', isGreaterThan: 0)
+        .orderBy('quantityAvailable')
+        .snapshots();
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _itemsStream,
+        stream: itemsStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return _buildErrorState();
@@ -207,21 +225,16 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             return _buildEmptyState();
           }
 
-          // Filter items by search query and category
-          final filteredItems = items
-              .where((item) {
-                // Filter by search query
-                final matchesSearch = item.name.toLowerCase().contains(
-                      _searchQuery.toLowerCase(),
-                    );
-                
-                // Filter by category
-                final matchesCategory = _selectedCategory == 'All' ||
-                    item.description == _selectedCategory;
-                
-                return matchesSearch && matchesCategory;
-              })
-              .toList();
+          // Filter items
+          final filteredItems = items.where((item) {
+            final matchesSearch = _searchQuery.isEmpty ||
+                item.name
+                    .toLowerCase()
+                    .startsWith(_searchQuery.toLowerCase());
+            final matchesCategory = _selectedCategory == 'All' ||
+                item.description == _selectedCategory;
+            return matchesSearch && matchesCategory;
+          }).toList();
 
           final categories = [
             'All',
@@ -256,7 +269,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           final count = _getCartCount();
           return count == 0
               ? const SizedBox.shrink()
-              : _buildCartFAB(count);
+              : _buildCartFAB(count, itemsStream);
         },
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -266,7 +279,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   Widget _buildHeader() {
     final distanceText = _getDistanceText();
     final addressText = _restaurantAddress ?? 'Serves fresh food daily';
-    final subtitleText = distanceText.isNotEmpty 
+    final subtitleText = distanceText.isNotEmpty
         ? '$distanceText • $addressText'
         : addressText;
 
@@ -295,7 +308,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                     ),
                     Text(
                       subtitleText,
-                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -312,8 +328,17 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: TextField(
+        controller: _searchController,
         onChanged: (value) {
-          setState(() => _searchQuery = value);
+          _searchDebounce?.cancel();
+          if (value.isEmpty) {
+            // Clear immediately — no delay needed
+            setState(() => _searchQuery = '');
+          } else {
+            _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+              setState(() => _searchQuery = value);
+            });
+          }
         },
         decoration: InputDecoration(
           hintText: 'Search for items...',
@@ -322,6 +347,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               ? IconButton(
                   icon: const Icon(Icons.clear, color: _mediumGrey),
                   onPressed: () {
+                    _searchController.clear();
                     setState(() => _searchQuery = '');
                   },
                 )
@@ -376,49 +402,17 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Widget _buildFoodsList(List<FoodItem> items, User? user) {
-    if (items.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No items found',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'Try a different search'
-                  : 'Try a different category',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
-        children: items
-            .map((item) => _buildFoodItemCard(context, item, user))
-            .toList(),
+        children: items.map((item) => _buildFoodItemCard(item, user)).toList(),
       ),
     );
   }
 
-  Widget _buildFoodItemCard(BuildContext context, FoodItem item, User? user) {
+  Widget _buildFoodItemCard(FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
+    final isFavorite = _favoriteFoodItemIds.contains(item.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -451,7 +445,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
@@ -460,18 +453,23 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => _toggleFoodItemFavorite(item),
-                        child: Icon(
-                          _favoritedItems.contains(item.id)
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          color: Colors.red,
-                          size: 18,
+                      IconButton(
+                        onPressed: () => _toggleFoodFavorite(item),
+                        icon: Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: isFavorite ? Colors.red : Colors.grey,
+                          size: 20,
+                        ),
+                        tooltip: isFavorite
+                            ? 'Remove from favorites'
+                            : 'Add to favorites',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
                         ),
                       ),
                     ],
@@ -498,7 +496,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
             // Add/Remove buttons
             ValueListenableBuilder<Map<String, int>>(
               valueListenable: _cartItems,
@@ -517,7 +514,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
   Widget _buildAddButton(FoodItem item, bool isSoldOut) {
     return ElevatedButton.icon(
-      onPressed: isSoldOut ? null : () => _startCheckout(context, item),
+      onPressed: isSoldOut ? null : () => _startCheckout(item),
       icon: const Icon(Icons.add, size: 16),
       label: const Text('Reserve'),
       style: ElevatedButton.styleFrom(
@@ -574,9 +571,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
-  Widget _buildCartFAB(int count) {
+  Widget _buildCartFAB(
+    int count,
+    Stream<QuerySnapshot<Map<String, dynamic>>> itemsStream,
+  ) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _itemsStream,
+      stream: itemsStream,
       builder: (context, snapshot) {
         final docs = snapshot.data?.docs ?? [];
         final items = docs.map(FoodItem.fromDoc).toList();
@@ -602,7 +602,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: ElevatedButton(
-            onPressed: () => _checkoutCart(context),
+            onPressed: _checkoutCart,
             style: ElevatedButton.styleFrom(
               backgroundColor: _primaryColor,
               minimumSize: const Size(double.infinity, 50),
@@ -619,7 +619,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -646,19 +646,15 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
-  Future<void> _checkoutCart(BuildContext context) async {
+  Future<void> _checkoutCart() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to checkout.')),
-      );
+      _showSnackBar('Please sign in to checkout.');
       return;
     }
 
     if (_cartItems.value.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cart is empty')));
+      _showSnackBar('Cart is empty');
       return;
     }
 
@@ -749,26 +745,15 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
       _cartItems.value = {};
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✓ Order placed successfully!'),
-            backgroundColor: _primaryColor,
-          ),
-        );
-        Navigator.pop(context);
+      _showSnackBar('✓ Order placed successfully!', backgroundColor: _primaryColor);
+      if (!mounted) {
+        return;
       }
+      Navigator.of(context).pop();
     } on StateError catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+      _showSnackBar(e.toString(), backgroundColor: Colors.red);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Checkout failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showSnackBar('Checkout failed: $e', backgroundColor: Colors.red);
     } finally {
       _setReserving('all', false);
     }
@@ -784,7 +769,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     _reservingIds.value = updated;
   }
 
-  Future<void> _startCheckout(BuildContext context, FoodItem item) async {
+  Future<void> _startCheckout(FoodItem item) async {
     final result = await Navigator.push<CheckoutResult>(
       context,
       MaterialPageRoute(
@@ -801,7 +786,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     }
 
     await _reserveFood(
-      context,
       item,
       result.quantity,
       notes: result.notes,
@@ -810,7 +794,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Future<void> _reserveFood(
-    BuildContext context,
     FoodItem item,
     int quantity, {
     String? notes,
@@ -818,9 +801,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to reserve.')),
-      );
+      _showSnackBar('Please sign in to reserve.');
       return;
     }
 
@@ -933,17 +914,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         });
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reserved $quantity x ${item.name}')),
-      );
+      _showSnackBar('Reserved $quantity x ${item.name}');
     } on StateError catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      _showSnackBar(e.message);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Reservation failed: $e')));
+      _showSnackBar('Reservation failed: $e');
     } finally {
       _setReserving(item.id, false);
     }
