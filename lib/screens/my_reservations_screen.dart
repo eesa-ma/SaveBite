@@ -646,7 +646,12 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       // Mark the order as reviewed
       final orderRef =
           FirebaseFirestore.instance.collection('orders').doc(orderId);
-      batch.update(orderRef, {'reviewed': true, 'rating': rating});
+      batch.update(orderRef, {
+        'reviewed': true,
+        'rating': rating,
+        'reviewComment': comment,
+        'reviewedAt': FieldValue.serverTimestamp(),
+      });
 
       await batch.commit();
 
@@ -659,7 +664,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         await FirebaseFirestore.instance.runTransaction((txn) async {
           final snap = await txn.get(restaurantRef);
           final d = snap.data() ?? {};
-          final oldCount = (d['reviewCount'] as num?)?.toInt() ?? 0;
+            final oldCount =
+              (d['reviewCount'] as num?)?.toInt() ??
+              (d['reviews'] as num?)?.toInt() ??
+              0;
           final oldAvg = (d['rating'] as num?)?.toDouble() ?? 0.0;
           final oldSum = oldAvg * oldCount;
           final newCount = oldCount + 1;
@@ -667,6 +675,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
               double.parse(((oldSum + rating) / newCount).toStringAsFixed(1));
           txn.update(restaurantRef, {
             'reviewCount': newCount,
+            'reviews': newCount,
             'rating': newAvg,
           });
         });

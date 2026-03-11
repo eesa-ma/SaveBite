@@ -31,11 +31,13 @@ class Restaurant {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     final latitudeValue = data['latitude'];
     final longitudeValue = data['longitude'];
+    final ratingValue = data['rating'];
+    final reviewCountValue = data['reviewCount'] ?? data['reviews'];
     return Restaurant(
       id: doc.id,
       name: data['name'] ?? 'Unknown Restaurant',
-      rating: (data['rating'] ?? 0).toDouble(),
-      reviews: data['reviews'] ?? 0,
+      rating: ratingValue is num ? ratingValue.toDouble() : 0.0,
+      reviews: reviewCountValue is num ? reviewCountValue.toInt() : 0,
       imageUrl:
           data['imageUrl'] ??
           'https://via.placeholder.com/300x200?text=Restaurant',
@@ -972,7 +974,7 @@ class _EntryScreenState extends State<EntryScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          if (restaurant.rating > 0)
+                            if (restaurant.rating > 0)
                             Row(
                               children: List.generate(5, (i) {
                                 final full = i < restaurant.rating.floor();
@@ -991,6 +993,17 @@ class _EntryScreenState extends State<EntryScreen> {
                                 );
                               }),
                             ),
+                          const SizedBox(height: 2),
+                          Text(
+                            restaurant.reviews > 0
+                                ? '${restaurant.rating.toStringAsFixed(1)} avg • ${restaurant.reviews} review${restaurant.reviews == 1 ? '' : 's'}'
+                                : 'No reviews yet',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                       IconButton(

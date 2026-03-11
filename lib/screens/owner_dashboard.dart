@@ -210,7 +210,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Add Menu Item'),
         content: SingleChildScrollView(
           child: Column(
@@ -255,7 +255,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -266,7 +266,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               final quantity = int.tryParse(quantityController.text) ?? 0;
 
               if (name.isEmpty || price <= 0 || quantity <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('Enter a name, price, and quantity.'),
                   ),
@@ -282,10 +282,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   price: price,
                   quantityAvailable: quantity,
                 );
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Item added successfully!'),
@@ -293,10 +293,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   ),
                 );
               } catch (error) {
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Failed to add item: $error')),
                 );
@@ -665,7 +665,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                               selected.id,
                               isOpen,
                             );
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
@@ -676,7 +676,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                               );
                             }
                           } catch (e) {
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('Error updating status: $e'),
@@ -868,6 +868,22 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         });
   }
 
+  Stream<Map<String, dynamic>> _getRatingStatsStream() {
+    return FirebaseFirestore.instance
+        .collection('restaurants')
+        .doc(widget.restaurantId)
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data() ?? {};
+          final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+          final reviews =
+              (data['reviewCount'] as num?)?.toInt() ??
+              (data['reviews'] as num?)?.toInt() ??
+              0;
+          return {'rating': rating, 'reviews': reviews};
+        });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -878,7 +894,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -890,9 +906,9 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
           Row(
             children: [
               // White Circle Icon
-              Container(
-                width: 62,
-                height: 62,
+                Container(
+                  width: 62,
+                  height: 62,
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
@@ -923,9 +939,38 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                     Text(
                       widget.address,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 14,
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    StreamBuilder<Map<String, dynamic>>(
+                      stream: _getRatingStatsStream(),
+                      builder: (context, snapshot) {
+                        final rating =
+                            snapshot.data?['rating'] as double? ?? 0.0;
+                        final reviews = snapshot.data?['reviews'] as int? ?? 0;
+                        return Row(
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              color: Colors.amber,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              reviews > 0
+                                  ? '${rating.toStringAsFixed(1)} avg ($reviews)'
+                                  : 'No ratings yet',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.95),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -934,8 +979,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
               const SizedBox(width: 8),
 
               // Toggle Section (Label + Switch)
-              Column(
-                mainAxisSize: MainAxisSize.min,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     widget.isOpen ? 'Open' : 'Closed',
@@ -953,8 +998,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                       child: Switch(
                         value: widget.isOpen,
                         onChanged: widget.onToggleStatus,
-                        activeColor: Colors.white,
-                        activeTrackColor: Colors.white.withOpacity(0.4),
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: Colors.white.withValues(alpha: 0.4),
                         inactiveThumbColor: Colors.white60,
                         inactiveTrackColor: Colors.black12,
                       ),
@@ -1005,7 +1050,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1015,7 +1060,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                               'Total Revenue',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -1044,7 +1089,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1054,7 +1099,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                               'Orders (Tap History)',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -1486,7 +1531,7 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
                 height: 220,
                 child: ListView.separated(
                   itemCount: filteredOrders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, index) =>
                       buildOrderTile(filteredOrders[index]),
                 ),
@@ -1885,12 +1930,12 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
     final item = widget.menuItems[index];
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete item?'),
         content: Text('Remove "${item.name}" from the menu?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -1898,20 +1943,20 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               widget
                   .onDeleteItem(item)
                   .then((_) {
-                    if (!mounted) {
+                    if (!mounted || !dialogContext.mounted) {
                       return;
                     }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       const SnackBar(content: Text('Item deleted.')),
                     );
                   })
                   .catchError((error) {
-                    if (!mounted) {
+                    if (!mounted || !dialogContext.mounted) {
                       return;
                     }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(content: Text('Error deleting item: $error')),
                     );
                   });
@@ -2033,7 +2078,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Edit Menu Item'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2076,7 +2121,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -2090,11 +2135,11 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               widget
                   .onUpdateItem(item, name, category, price, quantity)
                   .then((_) {
-                    if (!mounted) {
+                    if (!mounted || !dialogContext.mounted) {
                       return;
                     }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       const SnackBar(
                         content: Text('Item updated successfully!'),
                         duration: Duration(seconds: 2),
@@ -2102,10 +2147,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
                     );
                   })
                   .catchError((error) {
-                    if (!mounted) {
+                    if (!mounted || !dialogContext.mounted) {
                       return;
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(content: Text('Error updating item: $error')),
                     );
                   });
@@ -2144,13 +2189,13 @@ class _MenuItemCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAvailable
-              ? const Color(0xFF4CAF50).withOpacity(0.3)
-              : Colors.grey.withOpacity(0.3),
+              ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.3),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -2343,7 +2388,7 @@ class _LiveOrder {
   final List<_OrderLine> lines;
 
   double get subtotal =>
-      lines.fold(0.0, (sum, line) => sum + (line.price * line.quantity));
+      lines.fold(0.0, (total, line) => total + (line.price * line.quantity));
 }
 
 class _OrderLine {
@@ -2536,7 +2581,7 @@ void _showSettings(BuildContext context) {
 void _handleLogout(BuildContext context) {
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       title: const Row(
         children: [
           Icon(Icons.logout, color: Colors.red),
@@ -2547,7 +2592,7 @@ void _handleLogout(BuildContext context) {
       content: const Text('Are you sure you want to logout?'),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(dialogContext),
           child: const Text('Cancel'),
         ),
         FilledButton(
@@ -2555,7 +2600,13 @@ void _handleLogout(BuildContext context) {
             final authService = AuthService();
             try {
               await authService.logout();
-              Navigator.pop(context); // Close dialog
+              if (!dialogContext.mounted) {
+                return;
+              }
+              Navigator.pop(dialogContext); // Close dialog
+              if (!context.mounted) {
+                return;
+              }
               Navigator.pushReplacementNamed(context, '/entry');
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -2564,7 +2615,13 @@ void _handleLogout(BuildContext context) {
                 ),
               );
             } catch (e) {
-              Navigator.pop(context);
+              if (!dialogContext.mounted) {
+                return;
+              }
+              Navigator.pop(dialogContext);
+              if (!context.mounted) {
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Error logging out: $e'),
@@ -2669,6 +2726,10 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
       // Here you would save to Firestore
       // For now, just simulate a save
       await Future.delayed(const Duration(seconds: 1));
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isEditing = false;
@@ -2866,6 +2927,10 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
               'phone': _phoneController.text.trim(),
               'updatedAt': FieldValue.serverTimestamp(),
             });
+
+        if (!mounted) {
+          return;
+        }
 
         setState(() {
           _isEditing = false;
@@ -3321,6 +3386,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                         final quantity =
                             (data['quantity'] as num?)?.toInt() ?? 1;
                         final price = (data['price'] as num?)?.toDouble() ?? 0;
+                        final rating = (data['rating'] as num?)?.toDouble() ?? 0;
+                        final reviewComment =
+                            (data['reviewComment'] as String? ?? '').trim();
                         final createdAt = data['createdAt'] as Timestamp?;
                         final timestamp = createdAt?.toDate() ?? DateTime.now();
 
@@ -3363,7 +3431,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: statusColor.withOpacity(0.1),
+                                      color: statusColor.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
@@ -3407,6 +3475,12 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                   color: Colors.grey[500],
                                 ),
                               ),
+                              if (status == 'pickedUp')
+                                _OrderReviewBlock(
+                                  orderId: doc.id,
+                                  initialRating: rating,
+                                  initialComment: reviewComment,
+                                ),
                             ],
                           ),
                         );
@@ -3429,7 +3503,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.white.withOpacity(0.2),
+          color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -3477,5 +3551,99 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+  }
+}
+
+class _OrderReviewBlock extends StatelessWidget {
+  const _OrderReviewBlock({
+    required this.orderId,
+    required this.initialRating,
+    required this.initialComment,
+  });
+
+  final String orderId;
+  final double initialRating;
+  final String initialComment;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasInitial = initialRating > 0 || initialComment.isNotEmpty;
+
+    if (hasInitial) {
+      return _ReviewContent(rating: initialRating, comment: initialComment);
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('reviews')
+          .where('orderId', isEqualTo: orderId)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final doc = snapshot.data?.docs.isNotEmpty == true
+            ? snapshot.data!.docs.first
+            : null;
+        final data = doc?.data() ?? {};
+        final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+        final comment = (data['comment'] as String? ?? '').trim();
+
+        if (rating <= 0 && comment.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return _ReviewContent(rating: rating, comment: comment);
+      },
+    );
+  }
+}
+
+class _ReviewContent extends StatelessWidget {
+  const _ReviewContent({required this.rating, required this.comment});
+
+  final double rating;
+  final String comment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Customer review:',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 8),
+              ...List.generate(5, (i) {
+                final star = i + 1;
+                final icon = star <= rating ? Icons.star : Icons.star_border;
+                return Icon(icon, size: 14, color: Colors.amber);
+              }),
+              if (rating > 0) ...[
+                const SizedBox(width: 6),
+                Text(
+                  rating.toStringAsFixed(1),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (comment.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                comment,
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
