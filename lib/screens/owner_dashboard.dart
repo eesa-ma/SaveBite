@@ -17,8 +17,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
-  double? _restaurantLatitude;
-  double? _restaurantLongitude;
 
   // Cache snapshots to prevent flicker on rebuild
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _ordersSnapshotCache =
@@ -328,80 +326,88 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final phoneController = TextEditingController();
     final emailController = TextEditingController();
     final hoursController = TextEditingController();
+    double? restaurantLatitude;
+    double? restaurantLongitude;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Add Restaurant'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Restaurant Name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressController,
-              readOnly: true,
-              decoration: InputDecoration(
-                labelText: 'Address',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.location_on, color: Color(0xFF4CAF50)),
-                  onPressed: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MapPickerScreen(),
-                      ),
-                    );
-
-                    if (result != null) {
-                      setState(() {
-                        _restaurantLatitude = result['latitude'];
-                        _restaurantLongitude = result['longitude'];
-                        addressController.text = result['address'];
-                      });
-                    }
-                  },
+        scrollable: true,
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Restaurant Name',
+                  border: OutlineInputBorder(),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: addressController,
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: 'Address',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: const Icon(
+                      Icons.location_on,
+                      color: Color(0xFF4CAF50),
+                    ),
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        dialogContext,
+                        MaterialPageRoute(
+                          builder: (context) => MapPickerScreen(),
+                        ),
+                      );
+
+                      if (result != null) {
+                        restaurantLatitude = result['latitude'] as double?;
+                        restaurantLongitude = result['longitude'] as double?;
+                        addressController.text = (result['address'] ?? '')
+                            .toString();
+                      }
+                    },
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Phone',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: hoursController,
-              decoration: const InputDecoration(
-                labelText: 'Operating Hours',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: hoursController,
+                decoration: const InputDecoration(
+                  labelText: 'Operating Hours',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -417,9 +423,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   phone.isEmpty ||
                   email.isEmpty ||
                   hours.isEmpty ||
-                  _restaurantLatitude == null ||
-                  _restaurantLongitude == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                  restaurantLatitude == null ||
+                  restaurantLongitude == null) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('Fill all fields including location.'),
                   ),
@@ -436,25 +442,25 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   email: email,
                   hours: hours,
                   isOpen: true,
-                  latitude: _restaurantLatitude!,
-                  longitude: _restaurantLongitude!,
+                  latitude: restaurantLatitude!,
+                  longitude: restaurantLongitude!,
                 );
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
                 setState(() {
                   _selectedRestaurantId = doc.id;
                   _selectedRestaurantCache = null;
                 });
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Restaurant added.')),
                 );
               } catch (error) {
-                if (!mounted) {
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Failed to add restaurant: $error')),
                 );
