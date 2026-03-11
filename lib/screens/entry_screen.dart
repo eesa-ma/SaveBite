@@ -182,9 +182,7 @@ class _EntryScreenState extends State<EntryScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            isFavorite
-                ? 'Removed from favorites.'
-                : 'Added to favorites.',
+            isFavorite ? 'Removed from favorites.' : 'Added to favorites.',
           ),
         ),
       );
@@ -638,8 +636,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 itemCount: categories.length,
                 itemBuilder: (context, index) {
                   final category = categories[index];
-                  final isSelected =
-                      _selectedMindCategory == category['name'];
+                  final isSelected = _selectedMindCategory == category['name'];
                   return Column(
                     children: [
                       GestureDetector(
@@ -659,8 +656,9 @@ class _EntryScreenState extends State<EntryScreen> {
                             boxShadow: [
                               BoxShadow(
                                 color: isSelected
-                                    ? const Color(0xFF2E7D32)
-                                        .withValues(alpha: 0.35)
+                                    ? const Color(
+                                        0xFF2E7D32,
+                                      ).withValues(alpha: 0.35)
                                     : Colors.grey.withValues(alpha: 0.2),
                                 blurRadius: isSelected ? 8 : 4,
                                 offset: const Offset(0, 2),
@@ -692,8 +690,9 @@ class _EntryScreenState extends State<EntryScreen> {
                                   Container(
                                     width: 80,
                                     height: 80,
-                                    color: const Color(0xFF2E7D32)
-                                        .withValues(alpha: 0.25),
+                                    color: const Color(
+                                      0xFF2E7D32,
+                                    ).withValues(alpha: 0.25),
                                     child: const Icon(
                                       Icons.check_circle,
                                       color: Colors.white,
@@ -977,15 +976,16 @@ class _EntryScreenState extends State<EntryScreen> {
                             Row(
                               children: List.generate(5, (i) {
                                 final full = i < restaurant.rating.floor();
-                                final half = !full &&
+                                final half =
+                                    !full &&
                                     i < restaurant.rating &&
                                     (restaurant.rating - i) >= 0.5;
                                 return Icon(
                                   full
                                       ? Icons.star
                                       : half
-                                          ? Icons.star_half
-                                          : Icons.star_border,
+                                      ? Icons.star_half
+                                      : Icons.star_border,
                                   color: Colors.amber,
                                   size: 14,
                                 );
@@ -1043,29 +1043,29 @@ class _EntryScreenState extends State<EntryScreen> {
                                       restaurantName: restaurant.name,
                                     ),
                                   ),
-                                ),
-                              );
-                            }
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2E7D32),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 8,
+                                );
+                              }
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        child: const Text(
+                          'Order',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
-                      child: const Text(
-                        'Order',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -1075,6 +1075,7 @@ class _EntryScreenState extends State<EntryScreen> {
       ),
     );
   }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();
