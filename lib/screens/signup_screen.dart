@@ -174,7 +174,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   Text(
                     _isLogin
                         ? 'Login to continue'
-                        : 'Join SaveBite and reduce food waste',
+                        : 'Join SaveBite and reduce food wastage',
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 30),
