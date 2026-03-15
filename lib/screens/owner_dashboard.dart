@@ -1820,6 +1820,24 @@ class _OrderDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtotal = order.subtotal;
     final total = subtotal;
+    final displayOrderId = order.id.length > 10
+        ? 'Order #${order.id.substring(0, 10).toUpperCase()}'
+        : 'Order ${order.id}';
+    final statusChip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _statusColor(order.status).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _statusLabel(order.status),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: _statusColor(order.status),
+        ),
+      ),
+    );
 
     return SafeArea(
       top: false,
@@ -1845,35 +1863,45 @@ class _OrderDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              Row(
-                children: [
-                  Text(
-                    'Order ${order.id}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _statusColor(order.status).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _statusLabel(order.status),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _statusColor(order.status),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 360) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayOrderId,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        statusChip,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          displayOrderId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(width: 12),
+                      statusChip,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 6),
               Text(
@@ -2267,90 +2295,115 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Menu Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Item Name',
-                border: OutlineInputBorder(),
+      builder: (dialogContext) {
+        final media = MediaQuery.of(dialogContext);
+        final maxContentHeight =
+            (media.size.height - media.viewInsets.bottom - 220).clamp(
+                  220.0,
+                  media.size.height * 0.6,
+                )
+                as double;
+
+        return AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          title: const Text('Edit Menu Item'),
+          content: SizedBox(
+            width: 420,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxContentHeight),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Item Name',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: categoryController,
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Price',
+                        border: OutlineInputBorder(),
+                        prefixText: '₹ ',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: quantityController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Quantity',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: categoryController,
-              decoration: const InputDecoration(
-                labelText: 'Category',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Price',
-                border: OutlineInputBorder(),
-                prefixText: '₹ ',
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                final category = categoryController.text.trim();
+                final price =
+                    double.tryParse(priceController.text) ?? item.price;
+                final quantity =
+                    int.tryParse(quantityController.text) ?? item.quantity;
+
+                widget
+                    .onUpdateItem(item, name, category, price, quantity)
+                    .then((_) {
+                      if (!mounted || !dialogContext.mounted) {
+                        return;
+                      }
+                      Navigator.pop(dialogContext);
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text('Item updated successfully!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    })
+                    .catchError((error) {
+                      if (!mounted || !dialogContext.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        SnackBar(content: Text('Error updating item: $error')),
+                      );
+                    });
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                border: OutlineInputBorder(),
-              ),
+              child: const Text('Save'),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-              final category = categoryController.text.trim();
-              final price = double.tryParse(priceController.text) ?? item.price;
-              final quantity =
-                  int.tryParse(quantityController.text) ?? item.quantity;
-
-              widget
-                  .onUpdateItem(item, name, category, price, quantity)
-                  .then((_) {
-                    if (!mounted || !dialogContext.mounted) {
-                      return;
-                    }
-                    Navigator.pop(dialogContext);
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      const SnackBar(
-                        content: Text('Item updated successfully!'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  })
-                  .catchError((error) {
-                    if (!mounted || !dialogContext.mounted) {
-                      return;
-                    }
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(content: Text('Error updating item: $error')),
-                    );
-                  });
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
