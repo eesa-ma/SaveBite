@@ -98,6 +98,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           widget.restaurantId,
           item.id,
           item.name,
+          item.imageUrl,
         );
         if (!mounted) {
           return;
@@ -425,17 +426,29 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Food icon/image placeholder
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 80,
+                height: 80,
                 color: _lightGrey,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.fastfood_outlined,
-                color: _mediumGrey,
-                size: 40,
+                child: item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.fastfood_outlined,
+                            color: _mediumGrey,
+                            size: 40,
+                          );
+                        },
+                      )
+                    : const Icon(
+                        Icons.fastfood_outlined,
+                        color: _mediumGrey,
+                        size: 40,
+                      ),
               ),
             ),
             const SizedBox(width: 12),
@@ -590,6 +603,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               restaurantId: '',
               name: '',
               description: '',
+              imageUrl: '',
               price: 0,
               quantityAvailable: 0,
               isAvailable: false,
@@ -693,6 +707,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               restaurantId: '',
               name: '',
               description: '',
+              imageUrl: '',
               price: 0,
               quantityAvailable: 0,
               isAvailable: false,

@@ -23,6 +23,7 @@ class RestaurantService {
     required bool isOpen,
     required double latitude,
     required double longitude,
+    required String imageUrl,
   }) {
     return _firestore.collection('restaurants').add({
       'ownerId': ownerId,
@@ -34,6 +35,7 @@ class RestaurantService {
       'isOpen': isOpen,
       'latitude': latitude,
       'longitude': longitude,
+      'imageUrl': imageUrl,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -60,17 +62,20 @@ class RestaurantService {
   Future<void> addMenuItem({
     required String restaurantId,
     required String name,
-    required String description,
+    required String category,
     required double price,
     required int quantityAvailable,
+    required String imageUrl,
   }) {
     return _firestore.collection('foodItems').add({
       'restaurantId': restaurantId,
       'name': name,
-      'description': description,
+      'description': category,
+      'category': category,
       'price': price,
       'quantityAvailable': quantityAvailable,
       'isAvailable': quantityAvailable > 0,
+      'imageUrl': imageUrl,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
