@@ -242,7 +242,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                     ),
-
+                  const SizedBox(height: 20),
                   if (!_isLogin)
                     Column(
                       children: [
