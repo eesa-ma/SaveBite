@@ -2371,11 +2371,9 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
       builder: (dialogContext) {
         final media = MediaQuery.of(dialogContext);
         final maxContentHeight =
-            (media.size.height - media.viewInsets.bottom - 220).clamp(
-                  220.0,
-                  media.size.height * 0.6,
-                )
-                as double;
+            (media.size.height - media.viewInsets.bottom - 220)
+                .clamp(220.0, media.size.height * 0.6)
+                .toDouble();
 
         return AlertDialog(
           insetPadding: const EdgeInsets.symmetric(
