@@ -99,4 +99,83 @@ class RestaurantService {
       'isOpen': isOpen,
     });
   }
+
+  Future<void> _deleteQueryInBatches(Query<Map<String, dynamic>> query) async {
+    while (true) {
+      final snapshot = await query.limit(400).get();
+      if (snapshot.docs.isEmpty) {
+        break;
+      }
+
+      final batch = _firestore.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (snapshot.docs.length < 400) {
+        break;
+      }
+    }
+  }
+
+  Future<void> deleteRestaurant(String restaurantId) async {
+    final orderIds = <String>[];
+    QueryDocumentSnapshot<Map<String, dynamic>>? lastOrderDoc;
+
+    while (true) {
+      Query<Map<String, dynamic>> query = _firestore
+          .collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .orderBy(FieldPath.documentId)
+          .limit(400);
+
+      if (lastOrderDoc != null) {
+        query = query.startAfterDocument(lastOrderDoc);
+      }
+
+      final snapshot = await query.get();
+      if (snapshot.docs.isEmpty) {
+        break;
+      }
+
+      orderIds.addAll(snapshot.docs.map((doc) => doc.id));
+      lastOrderDoc = snapshot.docs.last;
+
+      if (snapshot.docs.length < 400) {
+        break;
+      }
+    }
+
+    await _deleteQueryInBatches(
+      _firestore
+          .collection('foodItems')
+          .where('restaurantId', isEqualTo: restaurantId),
+    );
+
+    await _deleteQueryInBatches(
+      _firestore
+          .collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId),
+    );
+
+    await _deleteQueryInBatches(
+      _firestore
+          .collection('reviews')
+          .where('restaurantId', isEqualTo: restaurantId),
+    );
+
+    // Some legacy review docs may not include restaurantId, so also delete by orderId.
+    for (var i = 0; i < orderIds.length; i += 10) {
+      final chunk = orderIds.sublist(
+        i,
+        (i + 10) > orderIds.length ? orderIds.length : (i + 10),
+      );
+      await _deleteQueryInBatches(
+        _firestore.collection('reviews').where('orderId', whereIn: chunk),
+      );
+    }
+
+    await _firestore.collection('restaurants').doc(restaurantId).delete();
+  }
 }

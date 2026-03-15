@@ -649,6 +649,58 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     );
   }
 
+  void _confirmDeleteRestaurant(_RestaurantSummary restaurant) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Restaurant?'),
+        content: Text(
+          'Delete "${restaurant.name}" and all of its food items, orders, and reviews?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await _restaurantService.deleteRestaurant(restaurant.id);
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                setState(() {
+                  if (_selectedRestaurantId == restaurant.id) {
+                    _selectedRestaurantId = '';
+                    _selectedRestaurantCache = null;
+                  }
+                  _ordersSnapshotCache.clear();
+                  _menuSnapshotCache.clear();
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Restaurant deleted.')),
+                );
+              } catch (error) {
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to delete restaurant: $error'),
+                  ),
+                );
+              }
+            },
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -826,6 +878,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         selectedId: selected.id,
                         onChanged: _onRestaurantChanged,
                         onAddRestaurant: _openAddRestaurantDialog,
+                        onDeleteRestaurant: _confirmDeleteRestaurant,
                       ),
                       _RestaurantHeader(
                         restaurantId: selected.id,
@@ -1333,12 +1386,14 @@ class _RestaurantSwitcher extends StatelessWidget {
     required this.selectedId,
     required this.onChanged,
     required this.onAddRestaurant,
+    required this.onDeleteRestaurant,
   });
 
   final List<_RestaurantSummary> restaurants;
   final String selectedId;
   final ValueChanged<String?> onChanged;
   final VoidCallback onAddRestaurant;
+  final ValueChanged<_RestaurantSummary> onDeleteRestaurant;
 
   @override
   Widget build(BuildContext context) {
@@ -1449,6 +1504,24 @@ class _RestaurantSwitcher extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
+          InkWell(
+            onTap: () => onDeleteRestaurant(selected),
+            borderRadius: BorderRadius.circular(26),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.delete_outline,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           InkWell(
             onTap: onAddRestaurant,
             borderRadius: BorderRadius.circular(26),
