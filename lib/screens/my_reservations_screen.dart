@@ -15,6 +15,33 @@ class MyReservationsScreen extends StatefulWidget {
 class _MyReservationsScreenState extends State<MyReservationsScreen> {
   int _selectedTab = 0; // 0: Active, 1: History
 
+  Future<String?> _resolveFoodImageUrl(Map<String, dynamic> orderData) async {
+    final directUrl = (orderData['imageUrl'] ?? '').toString().trim();
+    if (directUrl.isNotEmpty) {
+      return directUrl;
+    }
+
+    final foodItemId = (orderData['foodItemId'] ?? '').toString().trim();
+    if (foodItemId.isEmpty) {
+      return null;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('foodItems')
+          .doc(foodItemId)
+          .get();
+      if (!doc.exists) {
+        return null;
+      }
+      final data = doc.data();
+      final imageUrl = (data?['imageUrl'] ?? '').toString().trim();
+      return imageUrl.isEmpty ? null : imageUrl;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -115,7 +142,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           return const Center(
             child: CircularProgressIndicator(
               color: MyReservationsScreen._primaryColor,
-              ),
+            ),
           );
         }
 
@@ -227,7 +254,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         : 1;
     final status = data['status'] ?? 'new';
     final createdAt = data['createdAt'];
-    final price   = (data['price'] is num) ? (data['price'] as num) : 0.0;
+    final price = (data['price'] is num) ? (data['price'] as num) : 0.0;
 
     final timestamp = createdAt is Timestamp
         ? createdAt.toDate()
@@ -314,8 +341,38 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    FutureBuilder<String?>(
+                      future: _resolveFoodImageUrl(data),
+                      builder: (context, snapshot) {
+                        final imageUrl = snapshot.data;
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 56,
+                            height: 56,
+                            color: MyReservationsScreen._lightGrey,
+                            child: imageUrl != null && imageUrl.isNotEmpty
+                                ? Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Icon(
+                                        Icons.fastfood_outlined,
+                                        color: Colors.grey,
+                                      );
+                                    },
+                                  )
+                                : const Icon(
+                                    Icons.fastfood_outlined,
+                                    color: Colors.grey,
+                                  ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,6 +397,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '₹${(price * quantity).toStringAsFixed(0)}',
                       style: const TextStyle(
@@ -484,10 +542,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   const SizedBox(height: 16),
                   const Text(
                     'How was your order?',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -520,8 +575,14 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                     child: Text(
                       selectedRating == 0
                           ? 'Tap a star to rate'
-                          : ['', 'Poor', 'Fair', 'Good', 'Very Good',
-                              'Excellent'][selectedRating],
+                          : [
+                              '',
+                              'Poor',
+                              'Fair',
+                              'Good',
+                              'Very Good',
+                              'Excellent',
+                            ][selectedRating],
                       style: TextStyle(
                         fontSize: 13,
                         color: selectedRating == 0
@@ -541,13 +602,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                       hintText: 'Tell us what you thought (optional)...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFF5F5F5)),
+                        borderSide: const BorderSide(color: Color(0xFFF5F5F5)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFF5F5F5)),
+                        borderSide: const BorderSide(color: Color(0xFFF5F5F5)),
                       ),
                       filled: true,
                       fillColor: const Color(0xFFF5F5F5),
@@ -572,9 +631,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text(success
-                                        ? 'Thanks for your review!'
-                                        : 'Could not submit review. Try again.'),
+                                    content: Text(
+                                      success
+                                          ? 'Thanks for your review!'
+                                          : 'Could not submit review. Try again.',
+                                    ),
                                     backgroundColor: success
                                         ? MyReservationsScreen._primaryColor
                                         : Colors.red,
@@ -630,8 +691,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       final batch = FirebaseFirestore.instance.batch();
 
       // Save review document
-      final reviewRef =
-          FirebaseFirestore.instance.collection('reviews').doc();
+      final reviewRef = FirebaseFirestore.instance.collection('reviews').doc();
       batch.set(reviewRef, {
         'orderId': orderId,
         'restaurantId': orderData['restaurantId'] ?? '',
@@ -644,8 +704,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       });
 
       // Mark the order as reviewed
-      final orderRef =
-          FirebaseFirestore.instance.collection('orders').doc(orderId);
+      final orderRef = FirebaseFirestore.instance
+          .collection('orders')
+          .doc(orderId);
       batch.update(orderRef, {
         'reviewed': true,
         'rating': rating,
@@ -664,15 +725,16 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         await FirebaseFirestore.instance.runTransaction((txn) async {
           final snap = await txn.get(restaurantRef);
           final d = snap.data() ?? {};
-            final oldCount =
+          final oldCount =
               (d['reviewCount'] as num?)?.toInt() ??
               (d['reviews'] as num?)?.toInt() ??
               0;
           final oldAvg = (d['rating'] as num?)?.toDouble() ?? 0.0;
           final oldSum = oldAvg * oldCount;
           final newCount = oldCount + 1;
-          final newAvg =
-              double.parse(((oldSum + rating) / newCount).toStringAsFixed(1));
+          final newAvg = double.parse(
+            ((oldSum + rating) / newCount).toStringAsFixed(1),
+          );
           txn.update(restaurantRef, {
             'reviewCount': newCount,
             'reviews': newCount,
@@ -854,9 +916,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
               : 1);
       final foodName = orderData['foodName'] as String? ?? 'Unknown Item';
 
-      if 
-         (foodItemId == null ||
-          foodItemId.isEmpty) {
+      if (foodItemId == null || foodItemId.isEmpty) {
         throw Exception('Invalid order data');
       }
 
@@ -895,11 +955,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         }
 
         // 2. Get the food item document
-          
-        final foodRef =
-            FirebaseFirestore.instance
-          .collection('foodItems')
-          .doc(foodItemId);
+
+        final foodRef = FirebaseFirestore.instance
+            .collection('foodItems')
+            .doc(foodItemId);
         final foodSnapshot = await transaction.get(foodRef);
 
         if (!foodSnapshot.exists) {
@@ -907,19 +966,18 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         }
 
         final currentQuantity =
-            (foodSnapshot.get('quantityAvailable') as num?)
-                ?.toInt() ??
-            0;
+            (foodSnapshot.get('quantityAvailable') as num?)?.toInt() ?? 0;
 
         // 3. Calculate restored quantity (prevent negative)
-        final restoredQuantity =
-            (currentQuantity + orderedQuantity).clamp(0, double.infinity).toInt();
+        final restoredQuantity = (currentQuantity + orderedQuantity)
+            .clamp(0, double.infinity)
+            .toInt();
 
         // 4. Update order status to cancelled
         transaction.update(orderRef, {
-        'status': 'cancelled',
-        'cancelledAt': FieldValue.serverTimestamp(),
-      });
+          'status': 'cancelled',
+          'cancelledAt': FieldValue.serverTimestamp(),
+        });
 
         // 5. Restore food quantity and update availability
         transaction.update(foodRef, {
@@ -943,7 +1001,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                     SizedBox(width: 12),
                     Text(
                       'Order cancelled successfully',
-                      style: TextStyle(  fontWeight: FontWeight.bold  ),
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
