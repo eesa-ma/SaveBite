@@ -183,9 +183,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       return null;
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick image: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to pick image: $error')));
       }
       return null;
     }
@@ -1168,8 +1168,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
               const SizedBox(width: 8),
 
               // Toggle Section (Label + Switch)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
+              Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     widget.isOpen ? 'Open' : 'Closed',
@@ -3595,7 +3595,8 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                         final quantity =
                             (data['quantity'] as num?)?.toInt() ?? 1;
                         final price = (data['price'] as num?)?.toDouble() ?? 0;
-                        final rating = (data['rating'] as num?)?.toDouble() ?? 0;
+                        final rating =
+                            (data['rating'] as num?)?.toDouble() ?? 0;
                         final reviewComment =
                             (data['reviewComment'] as String? ?? '').trim();
                         final createdAt = data['createdAt'] as Timestamp?;
@@ -3712,7 +3713,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
+          color: isSelected
+              ? Colors.white
+              : Colors.white.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(

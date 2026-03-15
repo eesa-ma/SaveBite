@@ -228,11 +228,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
           // Filter items
           final filteredItems = items.where((item) {
-            final matchesSearch = _searchQuery.isEmpty ||
-                item.name
-                    .toLowerCase()
-                    .startsWith(_searchQuery.toLowerCase());
-            final matchesCategory = _selectedCategory == 'All' ||
+            final matchesSearch =
+                _searchQuery.isEmpty ||
+                item.name.toLowerCase().startsWith(_searchQuery.toLowerCase());
+            final matchesCategory =
+                _selectedCategory == 'All' ||
                 item.description == _selectedCategory;
             return matchesSearch && matchesCategory;
           }).toList();
@@ -760,7 +760,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
       _cartItems.value = {};
 
-      _showSnackBar('✓ Order placed successfully!', backgroundColor: _primaryColor);
+      _showSnackBar(
+        '✓ Order placed successfully!',
+        backgroundColor: _primaryColor,
+      );
       if (!mounted) {
         return;
       }
