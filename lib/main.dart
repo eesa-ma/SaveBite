@@ -7,6 +7,7 @@ import 'package:save_bite/screens/initial_screen.dart'; // Import the InitialScr
 import 'package:save_bite/screens/owner_dashboard.dart';
 import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
+import 'package:save_bite/screens/reset_password_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
 import 'package:save_bite/screens/profile_sync_screen.dart';
 import 'package:save_bite/screens/my_reservations_screen.dart';
@@ -34,9 +35,13 @@ class MyApp extends StatelessWidget {
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
+      scaffoldBackgroundColor: isDark
+          ? const Color(0xFF121212)
+          : const Color(0xFFF5F5F5),
       appBarTheme: AppBarTheme(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFF2E7D32),
+        backgroundColor: isDark
+            ? const Color(0xFF1E1E1E)
+            : const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         centerTitle: false,
         elevation: 0,
@@ -55,7 +60,9 @@ class MyApp extends StatelessWidget {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade900,
+        backgroundColor: isDark
+            ? const Color(0xFF2A2A2A)
+            : Colors.grey.shade900,
         contentTextStyle: const TextStyle(color: Colors.white),
       ),
     );
@@ -76,6 +83,7 @@ class MyApp extends StatelessWidget {
           home: const InitialScreen(),
           routes: {
             '/login': (context) => const SignupScreen(),
+            '/reset-password': (context) => const ResetPasswordScreen(),
             '/home': (context) => const HomeScreen(),
             '/entry': (context) => const EntryScreen(),
             '/owner': (context) => const OwnerDashboard(),
