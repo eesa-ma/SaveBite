@@ -172,6 +172,7 @@ class _EntryScreenState extends State<EntryScreen> {
         await _favoritesService.addRestaurantFavorite(
           restaurant.id,
           restaurant.name,
+          restaurant.imageUrl,
         );
         if (!mounted) {
           return;

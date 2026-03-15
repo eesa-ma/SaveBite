@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:save_bite/services/cloudinary_service.dart';
 import '../services/auth_serivce.dart';
 import '../services/restaurant_service.dart';
 import '../utils/theme_manager.dart';
@@ -15,6 +19,7 @@ class OwnerDashboard extends StatefulWidget {
 
 class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
 
@@ -61,6 +66,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       name: data['name'] ?? 'Restaurant',
       address: data['address'] ?? 'Address not set',
       isOpen: data['isOpen'] ?? false,
+      imageUrl: data['imageUrl'] ?? '',
     );
   }
 
@@ -73,6 +79,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       id: doc.id,
       name: data['name'] ?? 'Item',
       description: data['description'] ?? '',
+      imageUrl: data['imageUrl'] ?? '',
       price: (priceValue is num) ? priceValue.toDouble() : 0.0,
       isAvailable: data['isAvailable'] ?? true,
       category: data['category'] ?? 'Menu',
@@ -160,6 +167,58 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         });
   }
 
+  Future<File?> _pickImage() async {
+    try {
+      return await _cloudinaryService.pickImageFromGallery();
+    } on MissingPluginException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Image picker was added recently. Stop the app and run it again to enable image selection.',
+            ),
+          ),
+        );
+      }
+      return null;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick image: $error')),
+        );
+      }
+      return null;
+    }
+  }
+
+  Widget _buildSelectedImagePreview(File? imageFile, String placeholderText) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        height: 150,
+        color: const Color(0xFFF1F3F4),
+        child: imageFile != null
+            ? Image.file(imageFile, fit: BoxFit.cover)
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.image_outlined,
+                    size: 36,
+                    color: Colors.grey,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    placeholderText,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
   void _openOrderDetails(_LiveOrder order) {
     showModalBottomSheet(
       context: context,
@@ -207,107 +266,164 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final categoryController = TextEditingController();
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
+    File? selectedImageFile;
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Menu Item'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Food Name',
-                  border: OutlineInputBorder(),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Add Menu Item'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSelectedImagePreview(
+                  selectedImageFile,
+                  'No food image selected',
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: categoryController,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: priceController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Price',
-                  border: OutlineInputBorder(),
-                  prefixText: '₹ ',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final category = categoryController.text.trim();
-              final price = double.tryParse(priceController.text) ?? 0.0;
-              final quantity = int.tryParse(quantityController.text) ?? 0;
-
-              if (name.isEmpty || price <= 0 || quantity <= 0) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Enter a name, price, and quantity.'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final pickedImage = await _pickImage();
+                          if (pickedImage != null) {
+                            setDialogState(() {
+                              selectedImageFile = pickedImage;
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    selectedImageFile == null
+                        ? 'Choose Food Image'
+                        : 'Change Food Image',
                   ),
-                );
-                return;
-              }
-
-              try {
-                await _restaurantService.addMenuItem(
-                  restaurantId: restaurantId,
-                  name: name,
-                  description: category,
-                  price: price,
-                  quantityAvailable: quantity,
-                );
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Item added successfully!'),
-                    duration: Duration(seconds: 2),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Food Name',
+                    border: OutlineInputBorder(),
                   ),
-                );
-              } catch (error) {
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to add item: $error')),
-                );
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: categoryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Price',
+                    border: OutlineInputBorder(),
+                    prefixText: '₹ ',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Add Item'),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final name = nameController.text.trim();
+                      final category = categoryController.text.trim();
+                      final price =
+                          double.tryParse(priceController.text.trim()) ?? 0.0;
+                      final quantity =
+                          int.tryParse(quantityController.text.trim()) ?? 0;
+
+                      if (name.isEmpty ||
+                          category.isEmpty ||
+                          price <= 0 ||
+                          quantity <= 0 ||
+                          selectedImageFile == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Enter all fields and choose a food image.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                      });
+
+                      try {
+                        final imageUrl = await _cloudinaryService
+                            .uploadImageToCloudinary(selectedImageFile!);
+                        await _restaurantService.addMenuItem(
+                          restaurantId: restaurantId,
+                          name: name,
+                          category: category,
+                          price: price,
+                          quantityAvailable: quantity,
+                          imageUrl: imageUrl,
+                        );
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Item added successfully!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      } catch (error) {
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to add item: $error')),
+                        );
+                        setDialogState(() {
+                          isSubmitting = false;
+                        });
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add Item'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -328,150 +444,207 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final hoursController = TextEditingController();
     double? restaurantLatitude;
     double? restaurantLongitude;
+    File? selectedImageFile;
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Restaurant'),
-        scrollable: true,
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Restaurant Name',
-                  border: OutlineInputBorder(),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Add Restaurant'),
+          scrollable: true,
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSelectedImagePreview(
+                  selectedImageFile,
+                  'No restaurant image selected',
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: addressController,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Address',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: const Icon(
-                      Icons.location_on,
-                      color: Color(0xFF4CAF50),
-                    ),
-                    onPressed: () async {
-                      final result = await Navigator.push(
-                        dialogContext,
-                        MaterialPageRoute(
-                          builder: (context) => MapPickerScreen(),
-                        ),
-                      );
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final pickedImage = await _pickImage();
+                          if (pickedImage != null) {
+                            setDialogState(() {
+                              selectedImageFile = pickedImage;
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    selectedImageFile == null
+                        ? 'Choose Restaurant Image'
+                        : 'Change Restaurant Image',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Restaurant Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: addressController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Address',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(
+                        Icons.location_on,
+                        color: Color(0xFF4CAF50),
+                      ),
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final result = await Navigator.push(
+                                dialogContext,
+                                MaterialPageRoute(
+                                  builder: (context) => MapPickerScreen(),
+                                ),
+                              );
 
-                      if (result != null) {
-                        restaurantLatitude = result['latitude'] as double?;
-                        restaurantLongitude = result['longitude'] as double?;
-                        addressController.text = (result['address'] ?? '')
-                            .toString();
+                              if (result != null) {
+                                restaurantLatitude =
+                                    result['latitude'] as double?;
+                                restaurantLongitude =
+                                    result['longitude'] as double?;
+                                addressController.text =
+                                    (result['address'] ?? '').toString();
+                                setDialogState(() {});
+                              }
+                            },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: hoursController,
+                  decoration: const InputDecoration(
+                    labelText: 'Operating Hours',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final name = nameController.text.trim();
+                      final address = addressController.text.trim();
+                      final phone = phoneController.text.trim();
+                      final email = emailController.text.trim();
+                      final hours = hoursController.text.trim();
+
+                      if (name.isEmpty ||
+                          address.isEmpty ||
+                          phone.isEmpty ||
+                          email.isEmpty ||
+                          hours.isEmpty ||
+                          restaurantLatitude == null ||
+                          restaurantLongitude == null ||
+                          selectedImageFile == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Fill all fields, choose location, and select an image.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                      });
+
+                      try {
+                        final imageUrl = await _cloudinaryService
+                            .uploadImageToCloudinary(selectedImageFile!);
+                        final doc = await _restaurantService.addRestaurant(
+                          ownerId: user.uid,
+                          name: name,
+                          address: address,
+                          phone: phone,
+                          email: email,
+                          hours: hours,
+                          isOpen: true,
+                          latitude: restaurantLatitude!,
+                          longitude: restaurantLongitude!,
+                          imageUrl: imageUrl,
+                        );
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedRestaurantId = doc.id;
+                          _selectedRestaurantCache = null;
+                        });
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Restaurant added.')),
+                        );
+                      } catch (error) {
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to add restaurant: $error'),
+                          ),
+                        );
+                        setDialogState(() {
+                          isSubmitting = false;
+                        });
                       }
                     },
-                  ),
-                ),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: hoursController,
-                decoration: const InputDecoration(
-                  labelText: 'Operating Hours',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final address = addressController.text.trim();
-              final phone = phoneController.text.trim();
-              final email = emailController.text.trim();
-              final hours = hoursController.text.trim();
-
-              if (name.isEmpty ||
-                  address.isEmpty ||
-                  phone.isEmpty ||
-                  email.isEmpty ||
-                  hours.isEmpty ||
-                  restaurantLatitude == null ||
-                  restaurantLongitude == null) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Fill all fields including location.'),
-                  ),
-                );
-                return;
-              }
-
-              try {
-                final doc = await _restaurantService.addRestaurant(
-                  ownerId: user.uid,
-                  name: name,
-                  address: address,
-                  phone: phone,
-                  email: email,
-                  hours: hours,
-                  isOpen: true,
-                  latitude: restaurantLatitude!,
-                  longitude: restaurantLongitude!,
-                );
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                setState(() {
-                  _selectedRestaurantId = doc.id;
-                  _selectedRestaurantCache = null;
-                });
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Restaurant added.')),
-                );
-              } catch (error) {
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to add restaurant: $error')),
-                );
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add Restaurant'),
             ),
-            child: const Text('Add Restaurant'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -658,6 +831,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         restaurantId: selected.id,
                         name: selected.name,
                         address: selected.address,
+                        imageUrl: selected.imageUrl,
                         isOpen: selected.isOpen,
                         onToggleStatus: (isOpen) async {
                           try {
@@ -810,6 +984,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             return _restaurantService.updateMenuItem(item.id, {
               'name': name,
               'description': description,
+              'category': description,
               'price': price,
               'quantityAvailable': quantity,
               'isAvailable': quantity > 0,
@@ -830,6 +1005,7 @@ class _RestaurantHeader extends StatefulWidget {
     required this.restaurantId,
     required this.name,
     required this.address,
+    required this.imageUrl,
     required this.isOpen,
     required this.onToggleStatus,
   });
@@ -837,6 +1013,7 @@ class _RestaurantHeader extends StatefulWidget {
   final String restaurantId;
   final String name;
   final String address;
+  final String imageUrl;
   final bool isOpen;
   final Function(bool) onToggleStatus;
 
@@ -905,18 +1082,30 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         children: [
           Row(
             children: [
-              // White Circle Icon
-                Container(
+              // Restaurant image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
                   width: 62,
                   height: 62,
-                decoration: const BoxDecoration(
                   color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.restaurant,
-                  color: Color(0xFF4CAF50),
-                  size: 30,
+                  child: widget.imageUrl.isNotEmpty
+                      ? Image.network(
+                          widget.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.restaurant,
+                              color: Color(0xFF4CAF50),
+                              size: 30,
+                            );
+                          },
+                        )
+                      : const Icon(
+                          Icons.restaurant,
+                          color: Color(0xFF4CAF50),
+                          size: 30,
+                        ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -2206,17 +2395,33 @@ class _MenuItemCard extends StatelessWidget {
         child: Row(
           children: [
             // Food Emoji/Icon
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 56,
+                height: 56,
                 color: item.isAvailable
                     ? const Color(0xFFE8F5E9)
                     : const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(item.emoji, style: const TextStyle(fontSize: 28)),
+                child: item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              item.emoji,
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                          );
+                        },
+                      )
+                    : Center(
+                        child: Text(
+                          item.emoji,
+                          style: const TextStyle(fontSize: 28),
+                        ),
+                      ),
               ),
             ),
             const SizedBox(width: 12),
@@ -2356,12 +2561,14 @@ class _RestaurantSummary {
     required this.name,
     required this.address,
     required this.isOpen,
+    required this.imageUrl,
   });
 
   final String id;
   final String name;
   final String address;
   final bool isOpen;
+  final String imageUrl;
 }
 
 enum _LiveOrderStatus { newOrder, preparing, ready, pickedUp }
@@ -2405,6 +2612,7 @@ class _MenuItem {
     required this.id,
     required this.name,
     required this.description,
+    required this.imageUrl,
     required this.price,
     required this.isAvailable,
     required this.category,
@@ -2415,6 +2623,7 @@ class _MenuItem {
   final String id;
   String name;
   String description;
+  final String imageUrl;
   double price;
   bool isAvailable;
   final String category;

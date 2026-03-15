@@ -10,6 +10,7 @@ class FavoritesService {
   Future<void> addRestaurantFavorite(
     String restaurantId,
     String restaurantName,
+    String? imageUrl,
   ) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -21,7 +22,12 @@ class FavoritesService {
           .collection('favorites')
           .doc('restaurants')
           .set(
-            {restaurantId: restaurantName},
+            {
+              restaurantId: {
+                'name': restaurantName,
+                'imageUrl': imageUrl ?? '',
+              },
+            },
             SetOptions(merge: true),
           );
     } catch (e) {
@@ -77,6 +83,7 @@ class FavoritesService {
     String restaurantId,
     String itemId,
     String itemName,
+    String? imageUrl,
   ) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -92,6 +99,7 @@ class FavoritesService {
               itemId: {
                 'name': itemName,
                 'restaurantId': restaurantId,
+                'imageUrl': imageUrl ?? '',
               }
             },
             SetOptions(merge: true),
@@ -158,9 +166,44 @@ class FavoritesService {
 
     if (doc.exists) {
       final data = doc.data() ?? {};
-      return data.entries
-          .map((e) => {'id': e.key, 'name': e.value})
-          .toList();
+      final favorites = await Future.wait(
+        data.entries.map((entry) async {
+          final rawValue = entry.value;
+          String name = 'Restaurant';
+          String imageUrl = '';
+
+          if (rawValue is Map<String, dynamic>) {
+            name = (rawValue['name'] ?? 'Restaurant').toString();
+            imageUrl = (rawValue['imageUrl'] ?? '').toString();
+          } else {
+            name = rawValue.toString();
+          }
+
+          if (imageUrl.isEmpty) {
+            try {
+              final restaurantDoc = await _firestore
+                  .collection('restaurants')
+                  .doc(entry.key)
+                  .get();
+              final restaurantData = restaurantDoc.data();
+              if (restaurantData != null) {
+                name = (restaurantData['name'] ?? name).toString();
+                imageUrl = (restaurantData['imageUrl'] ?? '').toString();
+              }
+            } catch (e) {
+              debugPrint('Error fetching restaurant favorite metadata: $e');
+            }
+          }
+
+          return {
+            'id': entry.key,
+            'name': name,
+            'imageUrl': imageUrl,
+          };
+        }),
+      );
+
+      return favorites;
     }
     return [];
   }
@@ -179,13 +222,47 @@ class FavoritesService {
 
     if (doc.exists) {
       final data = doc.data() ?? {};
-      return data.entries
-          .map((e) => {
-            'id': e.key,
-            'name': e.value['name'],
-            'restaurantId': e.value['restaurantId'],
-          })
-          .toList();
+      final favorites = await Future.wait(
+        data.entries.map((entry) async {
+          final rawValue = entry.value;
+          String name = 'Item';
+          String restaurantId = '';
+          String imageUrl = '';
+
+          if (rawValue is Map<String, dynamic>) {
+            name = (rawValue['name'] ?? 'Item').toString();
+            restaurantId = (rawValue['restaurantId'] ?? '').toString();
+            imageUrl = (rawValue['imageUrl'] ?? '').toString();
+          }
+
+          if (imageUrl.isEmpty || restaurantId.isEmpty) {
+            try {
+              final itemDoc = await _firestore
+                  .collection('foodItems')
+                  .doc(entry.key)
+                  .get();
+              final itemData = itemDoc.data();
+              if (itemData != null) {
+                name = (itemData['name'] ?? name).toString();
+                restaurantId =
+                    (itemData['restaurantId'] ?? restaurantId).toString();
+                imageUrl = (itemData['imageUrl'] ?? imageUrl).toString();
+              }
+            } catch (e) {
+              debugPrint('Error fetching food favorite metadata: $e');
+            }
+          }
+
+          return {
+            'id': entry.key,
+            'name': name,
+            'restaurantId': restaurantId,
+            'imageUrl': imageUrl,
+          };
+        }),
+      );
+
+      return favorites;
     }
     return [];
   }
