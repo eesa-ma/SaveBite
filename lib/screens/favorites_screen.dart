@@ -98,9 +98,9 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     required String fallbackName,
   }) async {
     if (restaurantId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Restaurant not found.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Restaurant not found.')));
       return;
     }
 
@@ -173,7 +173,11 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           fallbackIcon: Icons.storefront,
           fallbackIconColor: colors.onPrimaryContainer,
         ),
-        title: Text(restaurantName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          restaurantName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: const Text('Tap to open restaurant'),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -261,11 +265,18 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'Could not load favourites',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -314,7 +325,6 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                       ),
               ],
             ),
-
     );
   }
 }

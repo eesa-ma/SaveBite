@@ -21,15 +21,9 @@ class FavoritesService {
           .doc(user.uid)
           .collection('favorites')
           .doc('restaurants')
-          .set(
-            {
-              restaurantId: {
-                'name': restaurantName,
-                'imageUrl': imageUrl ?? '',
-              },
-            },
-            SetOptions(merge: true),
-          );
+          .set({
+            restaurantId: {'name': restaurantName, 'imageUrl': imageUrl ?? ''},
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error adding restaurant favorite: $e');
       rethrow;
@@ -94,16 +88,13 @@ class FavoritesService {
           .doc(user.uid)
           .collection('favorites')
           .doc('items')
-          .set(
-            {
-              itemId: {
-                'name': itemName,
-                'restaurantId': restaurantId,
-                'imageUrl': imageUrl ?? '',
-              }
+          .set({
+            itemId: {
+              'name': itemName,
+              'restaurantId': restaurantId,
+              'imageUrl': imageUrl ?? '',
             },
-            SetOptions(merge: true),
-          );
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error adding food item favorite: $e');
       rethrow;
@@ -195,11 +186,7 @@ class FavoritesService {
             }
           }
 
-          return {
-            'id': entry.key,
-            'name': name,
-            'imageUrl': imageUrl,
-          };
+          return {'id': entry.key, 'name': name, 'imageUrl': imageUrl};
         }),
       );
 
@@ -244,8 +231,8 @@ class FavoritesService {
               final itemData = itemDoc.data();
               if (itemData != null) {
                 name = (itemData['name'] ?? name).toString();
-                restaurantId =
-                    (itemData['restaurantId'] ?? restaurantId).toString();
+                restaurantId = (itemData['restaurantId'] ?? restaurantId)
+                    .toString();
                 imageUrl = (itemData['imageUrl'] ?? imageUrl).toString();
               }
             } catch (e) {

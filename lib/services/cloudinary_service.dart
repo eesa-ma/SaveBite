@@ -28,10 +28,8 @@ class CloudinaryService {
   }
 
   Future<String> uploadImageToCloudinary(File imageFile) async {
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse(_uploadEndpoint),
-    )..fields['upload_preset'] = _uploadPreset;
+    final request = http.MultipartRequest('POST', Uri.parse(_uploadEndpoint))
+      ..fields['upload_preset'] = _uploadPreset;
 
     request.files.add(
       await http.MultipartFile.fromPath('file', imageFile.path),
