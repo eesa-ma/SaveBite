@@ -73,8 +73,13 @@ class AuthService {
   }
 
   // Send password reset email
-  Future<void> sendPasswordResetEmail(String email) async {
+  Future<void> resetPassword(String email) async {
     await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  // Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    await resetPassword(email);
   }
 
   // Current User
@@ -108,10 +113,7 @@ class AuthService {
   }
 
   // Update profile fields in both Auth and Firestore
-  Future<void> updateProfile({
-    required String name,
-    String? phone,
-  }) async {
+  Future<void> updateProfile({required String name, String? phone}) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception('No authenticated user found.');
