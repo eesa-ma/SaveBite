@@ -818,7 +818,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 }
 
                 return SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.only(bottom: 120),
                   child: Column(
                     children: [
                       _RestaurantSwitcher(
