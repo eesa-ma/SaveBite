@@ -129,26 +129,66 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           const SizedBox(height: 16),
           _buildSection(
             title: 'Your Order',
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.item.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 92,
+                    height: 92,
+                    color: Colors.grey[100],
+                    child: widget.item.imageUrl.isNotEmpty
+                        ? Image.network(
+                            widget.item.imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.fastfood_outlined,
+                                size: 40,
+                                color: Colors.grey,
+                              );
+                            },
+                          )
+                        : const Icon(
+                            Icons.fastfood_outlined,
+                            size: 40,
+                            color: Colors.grey,
+                          ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '₹${widget.item.price.toStringAsFixed(2)} each',
-                      style: TextStyle(color: Colors.grey[700]),
-                    ),
-                    _buildQuantityStepper(),
-                  ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.item.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (widget.item.description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.item.description,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '₹${widget.item.price.toStringAsFixed(2)} each',
+                            style: TextStyle(color: Colors.grey[700]),
+                          ),
+                          _buildQuantityStepper(),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

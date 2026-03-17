@@ -41,10 +41,6 @@ class MyApp extends StatelessWidget {
       scaffoldBackgroundColor: isDark
           ? const Color(0xFF121212)
           : const Color(0xFFF5F5F5),
-      textTheme: base.textTheme.apply(
-        bodyColor: colorScheme.onSurface,
-        displayColor: colorScheme.onSurface,
-      ),
       appBarTheme: AppBarTheme(
         backgroundColor: isDark
             ? const Color(0xFF1E1E1E)

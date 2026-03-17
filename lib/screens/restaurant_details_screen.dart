@@ -484,7 +484,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               child: Container(
                 width: 80,
                 height: 80,
-                color: theme.colorScheme.surfaceContainerHighest,
+                color: _lightGrey,
                 child: item.imageUrl.isNotEmpty
                     ? Image.network(
                         item.imageUrl,

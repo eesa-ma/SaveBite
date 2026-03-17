@@ -447,57 +447,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final phoneController = TextEditingController();
     final emailController = TextEditingController();
     final hoursController = TextEditingController();
-    TimeOfDay? openingTime;
-    TimeOfDay? closingTime;
     double? restaurantLatitude;
     double? restaurantLongitude;
     File? selectedImageFile;
     bool isSubmitting = false;
-
-    String formatTimeOfDay(TimeOfDay time) {
-      final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-      final minute = time.minute.toString().padLeft(2, '0');
-      final period = time.period == DayPeriod.am ? 'AM' : 'PM';
-      return '$hour:$minute $period';
-    }
-
-    void updateHoursText() {
-      if (openingTime == null || closingTime == null) {
-        hoursController.text = '';
-        return;
-      }
-      hoursController.text =
-          '${formatTimeOfDay(openingTime!)} - ${formatTimeOfDay(closingTime!)}';
-    }
-
-    Future<void> pickTime({
-      required bool isOpening,
-      required BuildContext pickerContext,
-      required StateSetter setDialogState,
-    }) async {
-      final initialTime = isOpening
-          ? (openingTime ?? const TimeOfDay(hour: 9, minute: 0))
-          : (closingTime ?? const TimeOfDay(hour: 22, minute: 0));
-
-      final picked = await showTimePicker(
-        context: pickerContext,
-        initialTime: initialTime,
-      );
-
-      if (picked == null) {
-        return;
-      }
-
-      if (isOpening) {
-        openingTime = picked;
-      } else {
-        closingTime = picked;
-      }
-
-      setDialogState(() {
-        updateHoursText();
-      });
-    }
 
     showDialog(
       context: context,
@@ -2702,7 +2655,7 @@ class _MenuItemCard extends StatelessWidget {
                 height: 56,
                 color: item.isAvailable
                     ? const Color(0xFFE8F5E9)
-                    : colorScheme.surfaceContainerHighest,
+                    : const Color(0xFFF5F5F5),
                 child: item.imageUrl.isNotEmpty
                     ? Image.network(
                         item.imageUrl,
@@ -2747,12 +2700,7 @@ class _MenuItemCard extends StatelessWidget {
                     item.description,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? Colors.white70
-                          : colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -2809,8 +2757,8 @@ class _MenuItemCard extends StatelessWidget {
                     activeTrackColor: const Color(
                       0xFF4CAF50,
                     ).withValues(alpha: 0.4),
-                    inactiveThumbColor: colorScheme.outline,
-                    inactiveTrackColor: colorScheme.surfaceContainerHighest,
+                    inactiveThumbColor: Colors.grey[400],
+                    inactiveTrackColor: Colors.grey[300],
                   ),
                 ),
                 // Edit & Delete Buttons
@@ -3810,36 +3758,11 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   final RestaurantService _restaurantService = RestaurantService();
   bool _notificationsEnabled = true;
   late bool _darkModeEnabled;
-  bool _isDeletingAccount = false;
 
   @override
   void initState() {
     super.initState();
     _darkModeEnabled = ThemeManager.isDarkMode;
-    _loadNotificationPreference();
-  }
-
-  Future<void> _loadNotificationPreference() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return;
-    }
-
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final data = doc.data() ?? {};
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _notificationsEnabled = (data['notificationsEnabled'] as bool?) ?? true;
-      });
-    } catch (_) {
-      // Keep default true if preference read fails.
-    }
   }
 
   void _showHelpSupport(BuildContext context) {

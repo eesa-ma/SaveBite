@@ -32,11 +32,13 @@ class Restaurant {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     final latitudeValue = data['latitude'];
     final longitudeValue = data['longitude'];
+    final ratingValue = data['rating'];
+    final reviewCountValue = data['reviewCount'] ?? data['reviews'];
     return Restaurant(
       id: doc.id,
       name: data['name'] ?? 'Unknown Restaurant',
-      rating: (data['rating'] ?? 0).toDouble(),
-      reviews: data['reviews'] ?? 0,
+      rating: ratingValue is num ? ratingValue.toDouble() : 0.0,
+      reviews: reviewCountValue is num ? reviewCountValue.toInt() : 0,
       imageUrl:
           data['imageUrl'] ??
           'https://via.placeholder.com/300x200?text=Restaurant',
@@ -586,156 +588,7 @@ class _EntryScreenState extends State<EntryScreen> {
             ),
 
             const SizedBox(height: 16),
-            /* 
-            // Scan a Heart Promotional Banner
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFE91E63), Color(0xFFC2185B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '.Scan a Heart',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Spot a heart, scan it &\nwin exciting rewards!',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'PLAY & WIN',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.pink.shade100,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.favorite,
-                          size: 50,
-                          color: Colors.pink.shade600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
 
-            const SizedBox(height: 16),
-
-            // Free Cash Banner
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A237E), Color(0xFF3F51B5)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Use your ₹40 free cash',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'auto applied at checkout',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.amber, width: 3),
-                    ),
-                    child: const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'FREE',
-                            style: TextStyle(
-                              color: Colors.amber,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '₹40',
-                            style: TextStyle(
-                              color: Colors.amber,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-*/
             // What's on your mind section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -847,57 +700,30 @@ class _EntryScreenState extends State<EntryScreen> {
               ),
             ),
 
-            const SizedBox(height: 24),
-
-            /* // Filter, Sort, Store, Offers
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(child: _buildActionButton(Icons.tune, 'Filter')),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildActionButton(Icons.arrow_downward, 'Sort by'),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildActionButton(Icons.storefront, '99 Store'),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildActionButton(Icons.local_offer, 'Offers'),
-                  ),
-                ],
-              ),
-            ),*/
-            const SizedBox(height: 24),
-
             // Restaurants to explore section with filter chips and list
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildFilterChip('All'),
-                    const SizedBox(width: 8),
-                    /*_buildFilterChip('American'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Italian'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Indian'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Japanese'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Mexican'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Chinese'),*/
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
+            // Padding(
+            //   padding: const EdgeInsets.symmetric(horizontal: 16),
+            //   child: SingleChildScrollView(
+            //     scrollDirection: Axis.horizontal,
+            //     child: Row(
+            //       children: [
+            //         _buildFilterChip('All'),
+            //         const SizedBox(width: 8),
+            //         /*_buildFilterChip('American'),
+            //         const SizedBox(width: 8),
+            //         _buildFilterChip('Italian'),
+            //         const SizedBox(width: 8),
+            //         _buildFilterChip('Indian'),
+            //         const SizedBox(width: 8),
+            //         _buildFilterChip('Japanese'),
+            //         const SizedBox(width: 8),
+            //         _buildFilterChip('Mexican'),
+            //         const SizedBox(width: 8),
+            //         _buildFilterChip('Chinese'),*/
+            //       ],
+            //     ),
+            //   ),
+            // ),
 
             // Restaurants List
             Padding(
@@ -953,30 +779,6 @@ class _EntryScreenState extends State<EntryScreen> {
             const SizedBox(height: 24),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label) {
-    final isSelected = selectedFilter == label;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (value) {
-        setState(() {
-          selectedFilter = label;
-          _categoryRestaurantIds = null;
-          _selectedMindCategory = null;
-        });
-      },
-      backgroundColor: Colors.white,
-      selectedColor: const Color(0xFF2E7D32),
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.black,
-        fontWeight: FontWeight.w500,
-      ),
-      side: BorderSide(
-        color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[300]!,
       ),
     );
   }
@@ -1115,6 +917,17 @@ class _EntryScreenState extends State<EntryScreen> {
                                 );
                               }),
                             ),
+                          const SizedBox(height: 2),
+                          Text(
+                            restaurant.reviews > 0
+                                ? '${restaurant.rating.toStringAsFixed(1)} avg • ${restaurant.reviews} review${restaurant.reviews == 1 ? '' : 's'}'
+                                : 'No reviews yet',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                       IconButton(
@@ -1133,19 +946,6 @@ class _EntryScreenState extends State<EntryScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.star, size: 16, color: Colors.amber),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${restaurant.reviews} reviews',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
                       Row(
                         children: [
                           Icon(

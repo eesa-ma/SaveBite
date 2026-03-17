@@ -175,7 +175,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   Text(
                     _isLogin
                         ? 'Login to continue'
-                        : 'Join SaveBite and reduce food waste',
+                        : 'Join SaveBite and reduce food wastage',
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 30),
@@ -226,6 +226,23 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ),
                   ),
+                  if (_isLogin)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                Navigator.of(
+                                  context,
+                                ).pushNamed('/reset-password');
+                              },
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(color: Color(0xFF2E7D32)),
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 20),
                   if (!_isLogin)
                     Column(
@@ -262,10 +279,6 @@ class _SignupScreenState extends State<SignupScreen> {
                             DropdownMenuItem(
                               value: 'Restaurant',
                               child: Text('Restaurant Owner'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Admin',
-                              child: Text('Admin'),
                             ),
                           ],
                           onChanged: (String? newValue) {

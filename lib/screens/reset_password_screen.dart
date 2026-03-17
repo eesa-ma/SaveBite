@@ -19,7 +19,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid email address.'),
-          duration: Duration(seconds: 3),
           backgroundColor: Colors.red,
         ),
       );
@@ -31,7 +30,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
-      await _authService.sendPasswordResetEmail(email);
+      await _authService.resetPassword(email);
       if (!mounted) {
         return;
       }
@@ -39,7 +38,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Password reset link sent. Check your email.'),
-          duration: Duration(seconds: 3),
           backgroundColor: Color(0xFF2E7D32),
         ),
       );
@@ -53,7 +51,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to send reset link: $e'),
-          duration: const Duration(seconds: 3),
           backgroundColor: Colors.red,
         ),
       );

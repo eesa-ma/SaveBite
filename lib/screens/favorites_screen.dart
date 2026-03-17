@@ -112,12 +112,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     if (restaurantId.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text('Restaurant not found.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
+      ).showSnackBar(const SnackBar(content: Text('Restaurant not found.')));
       return;
     }
 
