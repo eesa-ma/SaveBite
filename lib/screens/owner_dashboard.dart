@@ -447,10 +447,51 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final phoneController = TextEditingController();
     final emailController = TextEditingController();
     final hoursController = TextEditingController();
+    TimeOfDay? openingTime;
+    TimeOfDay? closingTime;
     double? restaurantLatitude;
     double? restaurantLongitude;
     File? selectedImageFile;
     bool isSubmitting = false;
+
+    String formatTimeOfDay(TimeOfDay time) {
+      final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+      final minute = time.minute.toString().padLeft(2, '0');
+      final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+      return '$hour:$minute $period';
+    }
+
+    Future<void> pickTime({
+      required bool isOpening,
+      required BuildContext pickerContext,
+      required void Function(void Function()) setDialogState,
+    }) async {
+      final initial = isOpening
+          ? (openingTime ?? const TimeOfDay(hour: 9, minute: 0))
+          : (closingTime ?? const TimeOfDay(hour: 18, minute: 0));
+
+      final picked = await showTimePicker(
+        context: pickerContext,
+        initialTime: initial,
+      );
+
+      if (picked == null) {
+        return;
+      }
+
+      setDialogState(() {
+        if (isOpening) {
+          openingTime = picked;
+        } else {
+          closingTime = picked;
+        }
+
+        if (openingTime != null && closingTime != null) {
+          hoursController.text =
+              '${formatTimeOfDay(openingTime!)} - ${formatTimeOfDay(closingTime!)}';
+        }
+      });
+    }
 
     showDialog(
       context: context,
@@ -3758,6 +3799,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   final RestaurantService _restaurantService = RestaurantService();
   bool _notificationsEnabled = true;
   late bool _darkModeEnabled;
+  bool _isDeletingAccount = false;
 
   @override
   void initState() {

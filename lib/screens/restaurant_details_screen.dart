@@ -355,7 +355,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                       _restaurantIsOpen ? 'Open now' : 'Closed',
                       style: TextStyle(
                         fontSize: 11,
-                        color: _restaurantIsOpen ? Colors.green[100] : Colors.red[100],
+                        color: _restaurantIsOpen
+                            ? Colors.green[100]
+                            : Colors.red[100],
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -466,7 +468,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   Widget _buildFoodItemCard(FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
     final isFavorite = _favoriteFoodItemIds.contains(item.id);
-    final theme = Theme.of(context);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -760,7 +761,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       }
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final orderGroupId = FirebaseFirestore.instance.collection('orders').doc().id;
+        final orderGroupId = FirebaseFirestore.instance
+            .collection('orders')
+            .doc()
+            .id;
 
         for (final entry in _cartItems.value.entries) {
           final itemId = entry.key;
@@ -971,7 +975,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       }
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final orderGroupId = FirebaseFirestore.instance.collection('orders').doc().id;
+        final orderGroupId = FirebaseFirestore.instance
+            .collection('orders')
+            .doc()
+            .id;
         final itemRef = FirebaseFirestore.instance
             .collection('foodItems')
             .doc(item.id);
@@ -1039,9 +1046,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
   Widget _buildErrorState() {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.restaurantName),
-      ),
+      appBar: AppBar(title: Text(widget.restaurantName)),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1060,9 +1065,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
   Widget _buildEmptyState() {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.restaurantName),
-      ),
+      appBar: AppBar(title: Text(widget.restaurantName)),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

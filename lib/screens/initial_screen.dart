@@ -60,9 +60,6 @@ class _InitialScreenState extends State<InitialScreen> {
       case 'Restaurant':
         route = '/restaurant';
         break;
-      case 'Admin':
-        route = '/admin';
-        break;
       case 'User':
       default:
         route = '/entry';
