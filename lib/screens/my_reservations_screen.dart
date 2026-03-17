@@ -151,10 +151,12 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         }
 
         final allDocs = snapshot.data?.docs ?? [];
-        final docs = _sortOrders(allDocs.where((doc) {
-          final status = (doc.data()['status'] ?? 'new').toString();
-          return _isActiveStatus(status);
-        }));
+        final docs = _sortOrders(
+          allDocs.where((doc) {
+            final status = (doc.data()['status'] ?? 'new').toString();
+            return _isActiveStatus(status);
+          }),
+        );
 
         if (docs.isEmpty) {
           return Center(
@@ -209,10 +211,12 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         }
 
         final allDocs = snapshot.data?.docs ?? [];
-        final docs = _sortOrders(allDocs.where((doc) {
-          final status = (doc.data()['status'] ?? 'new').toString();
-          return _isHistoryStatus(status);
-        }));
+        final docs = _sortOrders(
+          allDocs.where((doc) {
+            final status = (doc.data()['status'] ?? 'new').toString();
+            return _isHistoryStatus(status);
+          }),
+        );
 
         if (docs.isEmpty) {
           return Center(
@@ -291,7 +295,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                                 imageUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) {
-                                  return const Icon(Icons.storefront, color: Colors.grey);
+                                  return const Icon(
+                                    Icons.storefront,
+                                    color: Colors.grey,
+                                  );
                                 },
                               )
                             : const Icon(Icons.storefront, color: Colors.grey),
@@ -304,16 +311,17 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   child: FutureBuilder<Map<String, String>>(
                     future: _resolveRestaurantDetails(data),
                     builder: (context, snapshot) {
-                      final restaurant = snapshot.data ??
+                      final restaurant =
+                          snapshot.data ??
                           {
                             'name': restaurantName,
-                            'address':
-                                (data['restaurantAddress'] ?? '').toString(),
+                            'address': (data['restaurantAddress'] ?? '')
+                                .toString(),
                             'status': 'Loading...',
                           };
 
-                      final subtitle = (restaurant['status'] ==
-                                  'Closed permanently' ||
+                      final subtitle =
+                          (restaurant['status'] == 'Closed permanently' ||
                               (restaurant['address'] ?? '').trim().isEmpty)
                           ? (restaurant['status'] ?? '')
                           : (restaurant['address'] ?? '');
@@ -331,8 +339,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           const SizedBox(height: 2),
                           Text(
                             subtitle,
-                            style:
-                                TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -342,7 +352,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(999),
@@ -375,7 +388,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: MyReservationsScreen._lightGrey,
                         borderRadius: BorderRadius.circular(10),
@@ -598,15 +614,16 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                               color: Colors.grey[600],
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: FutureBuilder<String>(
                         future: _resolveRestaurantName(data),
                         builder: (context, snapshot) {
-                          final restaurantName = snapshot.data ??
+                          final restaurantName =
+                              snapshot.data ??
                               (data['restaurantName'] ?? 'Restaurant')
                                   .toString();
 
@@ -742,6 +759,216 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _ordersStream(String userId) {
+    return FirebaseFirestore.instance
+        .collection('orders')
+        .where('userId', isEqualTo: userId)
+        .snapshots();
+  }
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortOrders(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final list = docs.toList();
+    list.sort((a, b) {
+      final aDate = _createdAtFromData(a.data());
+      final bDate = _createdAtFromData(b.data());
+      return bDate.compareTo(aDate);
+    });
+    return list;
+  }
+
+  bool _isActiveStatus(String status) {
+    return status == 'new' || status == 'preparing' || status == 'ready';
+  }
+
+  bool _isHistoryStatus(String status) {
+    return status == 'pickedUp' || status == 'cancelled';
+  }
+
+  List<_OrderHistoryGroup> _groupHistoryOrders(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>> byKey =
+        {};
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final date = _createdAtFromData(data);
+      final status = (data['status'] ?? '').toString();
+      final restaurantId =
+          (data['restaurantId'] ?? data['restaurantName'] ?? '').toString();
+      final key =
+          '${date.year}-${date.month}-${date.day}-$status-$restaurantId';
+      byKey.putIfAbsent(key, () => []).add(doc);
+    }
+
+    final groups = byKey.entries
+        .map((entry) => _OrderHistoryGroup(key: entry.key, orders: entry.value))
+        .toList();
+
+    groups.sort((a, b) {
+      final aDate = _createdAtFromData(a.primaryData);
+      final bDate = _createdAtFromData(b.primaryData);
+      return bDate.compareTo(aDate);
+    });
+
+    return groups;
+  }
+
+  DateTime _createdAtFromData(Map<String, dynamic> data) {
+    final createdAt = data['createdAt'];
+    if (createdAt is Timestamp) {
+      return createdAt.toDate();
+    }
+    return DateTime.now();
+  }
+
+  double _groupBillTotal(_OrderHistoryGroup group) {
+    return group.orders.fold<double>(0, (total, doc) {
+      final item = doc.data();
+      final price = (item['price'] is num)
+          ? (item['price'] as num).toDouble()
+          : 0;
+      final quantity = (item['quantity'] is num)
+          ? (item['quantity'] as num).toInt()
+          : 1;
+      return total + (price * quantity);
+    });
+  }
+
+  Future<String?> _resolveOrderCardImage(Map<String, dynamic> data) async {
+    return _resolveFoodImageUrl(data);
+  }
+
+  Future<Map<String, String>> _resolveRestaurantDetails(
+    Map<String, dynamic> data,
+  ) async {
+    final fallbackName = (data['restaurantName'] ?? 'Restaurant').toString();
+    final fallbackAddress = (data['restaurantAddress'] ?? '').toString();
+    final restaurantId = (data['restaurantId'] ?? '').toString();
+
+    if (restaurantId.isEmpty) {
+      return {
+        'name': fallbackName,
+        'address': fallbackAddress,
+        'status': fallbackAddress.isEmpty
+            ? 'Address unavailable'
+            : fallbackAddress,
+      };
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .doc(restaurantId)
+          .get();
+      if (!doc.exists) {
+        return {
+          'name': fallbackName,
+          'address': fallbackAddress,
+          'status': 'Restaurant unavailable',
+        };
+      }
+
+      final restaurant = doc.data() ?? {};
+      final isOpen = restaurant['isOpen'] == true;
+      return {
+        'name': (restaurant['name'] ?? fallbackName).toString(),
+        'address': (restaurant['address'] ?? fallbackAddress).toString(),
+        'status': isOpen ? 'Open now' : 'Closed',
+      };
+    } catch (_) {
+      return {
+        'name': fallbackName,
+        'address': fallbackAddress,
+        'status': 'Unavailable',
+      };
+    }
+  }
+
+  Future<String> _resolveRestaurantName(Map<String, dynamic> data) async {
+    final details = await _resolveRestaurantDetails(data);
+    return details['name'] ?? 'Restaurant';
+  }
+
+  String _formatOrderDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final month = months[date.month - 1];
+    final hour24 = date.hour;
+    final hour = (hour24 % 12) == 0 ? 12 : (hour24 % 12);
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    return '${date.day} $month ${date.year}, $hour:$minute $period';
+  }
+
+  void _showHistoryGroupDetails(
+    BuildContext context,
+    _OrderHistoryGroup group,
+  ) {
+    final timestamp = _createdAtFromData(group.primaryData);
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Order details',
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              ...group.orders.map((doc) {
+                final item = doc.data();
+                final quantity = (item['quantity'] is num)
+                    ? (item['quantity'] as num).toInt()
+                    : 1;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text((item['foodName'] ?? 'Item').toString()),
+                  subtitle: Text('Qty: $quantity'),
+                  trailing: Text(
+                    '₹${(((item['price'] is num) ? item['price'] as num : 0) * quantity).toStringAsFixed(0)}',
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+              Text('Ordered: ${_formatOrderDate(timestamp)}'),
+              Text('Total: ₹${_groupBillTotal(group).toStringAsFixed(0)}'),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1014,10 +1241,10 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         return FutureBuilder<Map<String, String>>(
           future: _resolveRestaurantDetails(order),
           builder: (context, snapshot) {
-            final restaurant = snapshot.data ??
+            final restaurant =
+                snapshot.data ??
                 {
-                  'name':
-                      (order['restaurantName'] ?? 'Restaurant').toString(),
+                  'name': (order['restaurantName'] ?? 'Restaurant').toString(),
                   'address': (order['restaurantAddress'] ?? '').toString(),
                   'status': 'Loading...',
                 };

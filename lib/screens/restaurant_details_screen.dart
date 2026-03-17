@@ -468,7 +468,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   Widget _buildFoodItemCard(FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
     final isFavorite = _favoriteFoodItemIds.contains(item.id);
-    final theme = Theme.of(context);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
