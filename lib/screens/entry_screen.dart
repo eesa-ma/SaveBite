@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 import 'package:save_bite/services/favorites_service.dart';
+import 'package:save_bite/services/notification_center_service.dart';
 import 'package:save_bite/screens/restaurant_details_screen.dart';
 import '../services/location_service.dart';
 
@@ -56,6 +57,8 @@ class EntryScreen extends StatefulWidget {
 class _EntryScreenState extends State<EntryScreen> {
   final AuthService _authService = AuthService();
   final FavoritesService _favoritesService = FavoritesService();
+  final NotificationCenterService _notificationCenterService =
+      NotificationCenterService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final LocationService _locationService = LocationService();
   final TextEditingController searchController = TextEditingController();
@@ -73,11 +76,79 @@ class _EntryScreenState extends State<EntryScreen> {
   String? _selectedMindCategory;
   final Map<String, String> _distanceCache = {};
   Timer? _searchDebounce;
+  Timer? _notificationBadgeTimer;
+  int _notificationUnreadCount = 0;
+
+  Future<void> _handleNotificationsTap() async {
+    final user = _authService.getCurrentUser();
+    if (user != null) {
+      await Navigator.of(context).pushNamed('/notifications');
+      await _refreshNotificationUnreadCount();
+      return;
+    }
+
+    final shouldLogin = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Login Required'),
+        content: const Text('Please login first to view your notifications.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Login'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogin == true && mounted) {
+      Navigator.of(context).pushNamed('/login');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _initScreen();
+    _startNotificationBadgeRefresh();
+  }
+
+  void _startNotificationBadgeRefresh() {
+    _refreshNotificationUnreadCount();
+    _notificationBadgeTimer?.cancel();
+    _notificationBadgeTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshNotificationUnreadCount(),
+    );
+  }
+
+  Future<void> _refreshNotificationUnreadCount() async {
+    final user = _authService.getCurrentUser();
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notificationUnreadCount = 0;
+      });
+      return;
+    }
+
+    try {
+      final counts = await _notificationCenterService.getUnreadCounts(user.uid);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notificationUnreadCount = counts.total;
+      });
+    } catch (_) {
+      // Ignore transient badge refresh failures.
+    }
   }
 
   Future<void> _initScreen() async {
@@ -123,6 +194,7 @@ class _EntryScreenState extends State<EntryScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading restaurants: $e'),
+            duration: const Duration(seconds: 3),
             backgroundColor: Colors.red,
           ),
         );
@@ -150,7 +222,10 @@ class _EntryScreenState extends State<EntryScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to save favorites.')),
+        const SnackBar(
+          content: Text('Please log in to save favorites.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
@@ -170,6 +245,7 @@ class _EntryScreenState extends State<EntryScreen> {
         await _favoritesService.addRestaurantFavorite(
           restaurant.id,
           restaurant.name,
+          restaurant.imageUrl,
         );
         if (!mounted) {
           return;
@@ -182,15 +258,17 @@ class _EntryScreenState extends State<EntryScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            isFavorite
-                ? 'Removed from favorites.'
-                : 'Added to favorites.',
+            isFavorite ? 'Removed from favorites.' : 'Added to favorites.',
           ),
+          duration: const Duration(seconds: 3),
         ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Unable to update favorite: $e')),
+        SnackBar(
+          content: Text('Unable to update favorite: $e'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -376,6 +454,50 @@ class _EntryScreenState extends State<EntryScreen> {
                           size: 26,
                         ),
                         tooltip: 'My Reservations',
+                      ),
+                      IconButton(
+                        onPressed: _handleNotificationsTap,
+                        icon: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(
+                              Icons.notifications_active_outlined,
+                              color: Color(0xFF2E7D32),
+                              size: 26,
+                            ),
+                            if (_notificationUnreadCount > 0)
+                              Positioned(
+                                right: -8,
+                                top: -6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    _notificationUnreadCount > 99
+                                        ? '99+'
+                                        : _notificationUnreadCount.toString(),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        tooltip: 'Notifications',
                       ),
                       const SizedBox(width: 8),
                       GestureDetector(
@@ -638,8 +760,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 itemCount: categories.length,
                 itemBuilder: (context, index) {
                   final category = categories[index];
-                  final isSelected =
-                      _selectedMindCategory == category['name'];
+                  final isSelected = _selectedMindCategory == category['name'];
                   return Column(
                     children: [
                       GestureDetector(
@@ -659,8 +780,9 @@ class _EntryScreenState extends State<EntryScreen> {
                             boxShadow: [
                               BoxShadow(
                                 color: isSelected
-                                    ? const Color(0xFF2E7D32)
-                                        .withValues(alpha: 0.35)
+                                    ? const Color(
+                                        0xFF2E7D32,
+                                      ).withValues(alpha: 0.35)
                                     : Colors.grey.withValues(alpha: 0.2),
                                 blurRadius: isSelected ? 8 : 4,
                                 offset: const Offset(0, 2),
@@ -692,8 +814,9 @@ class _EntryScreenState extends State<EntryScreen> {
                                   Container(
                                     width: 80,
                                     height: 80,
-                                    color: const Color(0xFF2E7D32)
-                                        .withValues(alpha: 0.25),
+                                    color: const Color(
+                                      0xFF2E7D32,
+                                    ).withValues(alpha: 0.25),
                                     child: const Icon(
                                       Icons.check_circle,
                                       color: Colors.white,
@@ -977,15 +1100,16 @@ class _EntryScreenState extends State<EntryScreen> {
                             Row(
                               children: List.generate(5, (i) {
                                 final full = i < restaurant.rating.floor();
-                                final half = !full &&
+                                final half =
+                                    !full &&
                                     i < restaurant.rating &&
                                     (restaurant.rating - i) >= 0.5;
                                 return Icon(
                                   full
                                       ? Icons.star
                                       : half
-                                          ? Icons.star_half
-                                          : Icons.star_border,
+                                      ? Icons.star_half
+                                      : Icons.star_border,
                                   color: Colors.amber,
                                   size: 14,
                                 );
@@ -1088,9 +1212,11 @@ class _EntryScreenState extends State<EntryScreen> {
       ),
     );
   }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _notificationBadgeTimer?.cancel();
     searchController.dispose();
     searchFocusNode.dispose();
     super.dispose();

@@ -66,11 +66,17 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       }
       await _loadFavorites();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Removed from favorites.')),
+        const SnackBar(
+          content: Text('Removed from favorites.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to remove favorite: $e')),
+        SnackBar(
+          content: Text('Failed to remove favorite: $e'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -84,11 +90,17 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       }
       await _loadFavorites();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Removed from favorites.')),
+        const SnackBar(
+          content: Text('Removed from favorites.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to remove favorite: $e')),
+        SnackBar(
+          content: Text('Failed to remove favorite: $e'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -98,8 +110,13 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     required String fallbackName,
   }) async {
     if (restaurantId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Restaurant not found.')),
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(
+          content: Text('Restaurant not found.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
@@ -157,6 +174,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     final colors = Theme.of(context).colorScheme;
     final restaurantId = (restaurant['id'] ?? '').toString();
     final restaurantName = (restaurant['name'] ?? 'Restaurant').toString();
+    final imageUrl = (restaurant['imageUrl'] ?? '').toString();
 
     return Card(
       elevation: 1,
@@ -166,16 +184,17 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           restaurantId: restaurantId,
           fallbackName: restaurantName,
         ),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: colors.primaryContainer,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(Icons.storefront, color: colors.onPrimaryContainer),
+        leading: _buildFavoriteImage(
+          imageUrl: imageUrl,
+          backgroundColor: colors.primaryContainer,
+          fallbackIcon: Icons.storefront,
+          fallbackIconColor: colors.onPrimaryContainer,
         ),
-        title: Text(restaurantName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          restaurantName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: const Text('Tap to open restaurant'),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -190,6 +209,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     final itemId = (item['id'] ?? '').toString();
     final itemName = (item['name'] ?? 'Item').toString();
     final restaurantId = (item['restaurantId'] ?? '').toString();
+    final imageUrl = (item['imageUrl'] ?? '').toString();
 
     return Card(
       elevation: 1,
@@ -199,14 +219,11 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           restaurantId: restaurantId,
           fallbackName: 'Restaurant',
         ),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: colors.secondaryContainer,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(Icons.fastfood, color: colors.onSecondaryContainer),
+        leading: _buildFavoriteImage(
+          imageUrl: imageUrl,
+          backgroundColor: colors.secondaryContainer,
+          fallbackIcon: Icons.fastfood,
+          fallbackIconColor: colors.onSecondaryContainer,
         ),
         title: Text(itemName, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: const Text('Tap to open restaurant'),
@@ -214,6 +231,31 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           icon: const Icon(Icons.delete_outline, color: Colors.red),
           onPressed: () => _removeFoodFavorite(itemId),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFavoriteImage({
+    required String imageUrl,
+    required Color backgroundColor,
+    required IconData fallbackIcon,
+    required Color fallbackIconColor,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 48,
+        height: 48,
+        color: backgroundColor,
+        child: imageUrl.isNotEmpty
+            ? Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(fallbackIcon, color: fallbackIconColor);
+                },
+              )
+            : Icon(fallbackIcon, color: fallbackIconColor),
       ),
     );
   }
@@ -240,11 +282,18 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'Could not load favourites',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -293,7 +342,6 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                       ),
               ],
             ),
-
     );
   }
 }

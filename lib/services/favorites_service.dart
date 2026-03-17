@@ -10,6 +10,7 @@ class FavoritesService {
   Future<void> addRestaurantFavorite(
     String restaurantId,
     String restaurantName,
+    String? imageUrl,
   ) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -20,10 +21,9 @@ class FavoritesService {
           .doc(user.uid)
           .collection('favorites')
           .doc('restaurants')
-          .set(
-            {restaurantId: restaurantName},
-            SetOptions(merge: true),
-          );
+          .set({
+            restaurantId: {'name': restaurantName, 'imageUrl': imageUrl ?? ''},
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error adding restaurant favorite: $e');
       rethrow;
@@ -77,6 +77,7 @@ class FavoritesService {
     String restaurantId,
     String itemId,
     String itemName,
+    String? imageUrl,
   ) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -87,15 +88,13 @@ class FavoritesService {
           .doc(user.uid)
           .collection('favorites')
           .doc('items')
-          .set(
-            {
-              itemId: {
-                'name': itemName,
-                'restaurantId': restaurantId,
-              }
+          .set({
+            itemId: {
+              'name': itemName,
+              'restaurantId': restaurantId,
+              'imageUrl': imageUrl ?? '',
             },
-            SetOptions(merge: true),
-          );
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error adding food item favorite: $e');
       rethrow;
@@ -158,9 +157,61 @@ class FavoritesService {
 
     if (doc.exists) {
       final data = doc.data() ?? {};
-      return data.entries
-          .map((e) => {'id': e.key, 'name': e.value})
-          .toList();
+      final staleRestaurantIds = <String>[];
+
+      final favorites = await Future.wait<Map<String, dynamic>?>(
+        data.entries.map((entry) async {
+          final rawValue = entry.value;
+          String name = 'Restaurant';
+          String imageUrl = '';
+
+          if (rawValue is Map<String, dynamic>) {
+            name = (rawValue['name'] ?? 'Restaurant').toString();
+            imageUrl = (rawValue['imageUrl'] ?? '').toString();
+          } else {
+            name = rawValue.toString();
+          }
+
+          try {
+            final restaurantDoc = await _firestore
+                .collection('restaurants')
+                .doc(entry.key)
+                .get();
+
+            if (!restaurantDoc.exists) {
+              staleRestaurantIds.add(entry.key);
+              return null;
+            }
+
+            final restaurantData = restaurantDoc.data() ?? {};
+            name = (restaurantData['name'] ?? name).toString();
+            imageUrl = (restaurantData['imageUrl'] ?? imageUrl).toString();
+          } catch (e) {
+            debugPrint('Error fetching restaurant favorite metadata: $e');
+          }
+
+          return {'id': entry.key, 'name': name, 'imageUrl': imageUrl};
+        }),
+      );
+
+      if (staleRestaurantIds.isNotEmpty) {
+        final updates = <String, dynamic>{
+          for (final id in staleRestaurantIds) id: FieldValue.delete(),
+        };
+
+        try {
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('favorites')
+              .doc('restaurants')
+              .update(updates);
+        } catch (e) {
+          debugPrint('Error removing stale restaurant favorites: $e');
+        }
+      }
+
+      return favorites.whereType<Map<String, dynamic>>().toList();
     }
     return [];
   }
@@ -179,13 +230,67 @@ class FavoritesService {
 
     if (doc.exists) {
       final data = doc.data() ?? {};
-      return data.entries
-          .map((e) => {
-            'id': e.key,
-            'name': e.value['name'],
-            'restaurantId': e.value['restaurantId'],
-          })
-          .toList();
+      final staleItemIds = <String>[];
+
+      final favorites = await Future.wait<Map<String, dynamic>?>(
+        data.entries.map((entry) async {
+          final rawValue = entry.value;
+          String name = 'Item';
+          String restaurantId = '';
+          String imageUrl = '';
+
+          if (rawValue is Map<String, dynamic>) {
+            name = (rawValue['name'] ?? 'Item').toString();
+            restaurantId = (rawValue['restaurantId'] ?? '').toString();
+            imageUrl = (rawValue['imageUrl'] ?? '').toString();
+          }
+
+          try {
+            final itemDoc = await _firestore
+                .collection('foodItems')
+                .doc(entry.key)
+                .get();
+
+            if (!itemDoc.exists) {
+              staleItemIds.add(entry.key);
+              return null;
+            }
+
+            final itemData = itemDoc.data() ?? {};
+            name = (itemData['name'] ?? name).toString();
+            restaurantId = (itemData['restaurantId'] ?? restaurantId).toString();
+            imageUrl = (itemData['imageUrl'] ?? imageUrl).toString();
+          } catch (e) {
+            debugPrint('Error fetching food favorite metadata: $e');
+          }
+
+          return {
+            'id': entry.key,
+            'name': name,
+            'restaurantId': restaurantId,
+            'imageUrl': imageUrl,
+          };
+        }),
+      );
+
+      if (staleItemIds.isNotEmpty) {
+        final updates = <String, dynamic>{
+          for (final id in staleItemIds) id: FieldValue.delete(),
+        };
+
+        try {
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('favorites')
+              .doc('items')
+              .update(updates);
+        } catch (e) {
+          debugPrint('Error removing stale food item favorites: $e');
+        }
+      }
+
+      return favorites.whereType<Map<String, dynamic>>().toList();
     }
     return [];
   }

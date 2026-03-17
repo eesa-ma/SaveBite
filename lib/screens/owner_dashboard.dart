@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:save_bite/services/cloudinary_service.dart';
 import '../services/auth_serivce.dart';
 import '../services/restaurant_service.dart';
+import '../utils/theme_manager.dart';
 import 'map_picker_screen.dart';
 
 class OwnerDashboard extends StatefulWidget {
@@ -14,18 +19,15 @@ class OwnerDashboard extends StatefulWidget {
 
 class _OwnerDashboardState extends State<OwnerDashboard> {
   final RestaurantService _restaurantService = RestaurantService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
-  bool _selectionSyncScheduled = false;
-  double? _restaurantLatitude;
-  double? _restaurantLongitude;
 
   // Cache snapshots to prevent flicker on rebuild
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _ordersSnapshotCache =
       {};
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _menuSnapshotCache =
       {};
-    QuerySnapshot<Map<String, dynamic>>? _restaurantsSnapshotCache;
 
   _LiveOrderStatus _statusFromString(String? value) {
     switch (value) {
@@ -37,6 +39,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         return _LiveOrderStatus.ready;
       case 'pickedUp':
         return _LiveOrderStatus.pickedUp;
+      case 'cancelled':
+        return _LiveOrderStatus.cancelled;
       default:
         return _LiveOrderStatus.newOrder;
     }
@@ -52,6 +56,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         return 'ready';
       case _LiveOrderStatus.pickedUp:
         return 'pickedUp';
+      case _LiveOrderStatus.cancelled:
+        return 'cancelled';
     }
   }
 
@@ -64,6 +70,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       name: data['name'] ?? 'Restaurant',
       address: data['address'] ?? 'Address not set',
       isOpen: data['isOpen'] ?? false,
+      imageUrl: data['imageUrl'] ?? '',
     );
   }
 
@@ -76,6 +83,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       id: doc.id,
       name: data['name'] ?? 'Item',
       description: data['description'] ?? '',
+      imageUrl: data['imageUrl'] ?? '',
       price: (priceValue is num) ? priceValue.toDouble() : 0.0,
       isAvailable: data['isAvailable'] ?? true,
       category: data['category'] ?? 'Menu',
@@ -138,6 +146,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       customerName: data['customerName'] ?? 'Customer',
       customerPhone: data['customerPhone'] ?? 'N/A',
       deliveryAddress: data['deliveryAddress'] ?? 'Address not set',
+      notes: (data['notes'] ?? '').toString(),
       placedAt: placedAt,
       lines: lines,
     );
@@ -161,6 +170,58 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         .catchError((_) {
           // Error will be shown in UI via StreamBuilder
         });
+  }
+
+  Future<File?> _pickImage() async {
+    try {
+      return await _cloudinaryService.pickImageFromGallery();
+    } on MissingPluginException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Image picker was added recently. Stop the app and run it again to enable image selection.',
+            ),
+          ),
+        );
+      }
+      return null;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to pick image: $error')));
+      }
+      return null;
+    }
+  }
+
+  Widget _buildSelectedImagePreview(File? imageFile, String placeholderText) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        height: 150,
+        color: const Color(0xFFF1F3F4),
+        child: imageFile != null
+            ? Image.file(imageFile, fit: BoxFit.cover)
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.image_outlined,
+                    size: 36,
+                    color: Colors.grey,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    placeholderText,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+      ),
+    );
   }
 
   void _openOrderDetails(_LiveOrder order) {
@@ -207,116 +268,172 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     }
 
     final nameController = TextEditingController();
-    final descriptionController = TextEditingController();
+    final categoryController = TextEditingController();
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
+    File? selectedImageFile;
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Menu Item'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Food Name',
-                  border: OutlineInputBorder(),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Add Menu Item'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSelectedImagePreview(
+                  selectedImageFile,
+                  'No food image selected',
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: priceController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Price',
-                  border: OutlineInputBorder(),
-                  prefixText: '₹ ',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final description = descriptionController.text.trim();
-              final price = double.tryParse(priceController.text) ?? 0.0;
-              final quantity = int.tryParse(quantityController.text) ?? 0;
-
-              if (name.isEmpty || price <= 0 || quantity <= 0) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Enter a name, price, and quantity.'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final pickedImage = await _pickImage();
+                          if (pickedImage != null) {
+                            setDialogState(() {
+                              selectedImageFile = pickedImage;
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    selectedImageFile == null
+                        ? 'Choose Food Image'
+                        : 'Change Food Image',
                   ),
-                );
-                return;
-              }
-
-              try {
-                await _restaurantService.addMenuItem(
-                  restaurantId: restaurantId,
-                  name: name,
-                  description: description,
-                  price: price,
-                  quantityAvailable: quantity,
-                );
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Item added successfully!'),
-                    duration: Duration(seconds: 2),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Food Name',
+                    border: OutlineInputBorder(),
                   ),
-                );
-              } catch (error) {
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to add item: $error')),
-                );
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: categoryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Price',
+                    border: OutlineInputBorder(),
+                    prefixText: '₹ ',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Add Item'),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final name = nameController.text.trim();
+                      final category = categoryController.text.trim();
+                      final price =
+                          double.tryParse(priceController.text.trim()) ?? 0.0;
+                      final quantity =
+                          int.tryParse(quantityController.text.trim()) ?? 0;
+
+                      if (name.isEmpty ||
+                          category.isEmpty ||
+                          price <= 0 ||
+                          quantity <= 0 ||
+                          selectedImageFile == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Enter all fields and choose a food image.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                      });
+
+                      try {
+                        final imageUrl = await _cloudinaryService
+                            .uploadImageToCloudinary(selectedImageFile!);
+                        await _restaurantService.addMenuItem(
+                          restaurantId: restaurantId,
+                          name: name,
+                          category: category,
+                          price: price,
+                          quantityAvailable: quantity,
+                          imageUrl: imageUrl,
+                        );
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Item added successfully!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      } catch (error) {
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to add item: $error')),
+                        );
+                        setDialogState(() {
+                          isSubmitting = false;
+                        });
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add Item'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Future<void> _openAddRestaurantDialog() async {
+  void _openAddRestaurantDialog() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -330,17 +447,93 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final phoneController = TextEditingController();
     final emailController = TextEditingController();
     final hoursController = TextEditingController();
+    TimeOfDay? openingTime;
+    TimeOfDay? closingTime;
+    double? restaurantLatitude;
+    double? restaurantLongitude;
+    File? selectedImageFile;
+    bool isSubmitting = false;
 
-    await showDialog(
+    String formatTimeOfDay(TimeOfDay time) {
+      final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+      final minute = time.minute.toString().padLeft(2, '0');
+      final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+      return '$hour:$minute $period';
+    }
+
+    void updateHoursText() {
+      if (openingTime == null || closingTime == null) {
+        hoursController.text = '';
+        return;
+      }
+      hoursController.text =
+          '${formatTimeOfDay(openingTime!)} - ${formatTimeOfDay(closingTime!)}';
+    }
+
+    Future<void> pickTime({
+      required bool isOpening,
+      required BuildContext pickerContext,
+      required StateSetter setDialogState,
+    }) async {
+      final initialTime = isOpening
+          ? (openingTime ?? const TimeOfDay(hour: 9, minute: 0))
+          : (closingTime ?? const TimeOfDay(hour: 22, minute: 0));
+
+      final picked = await showTimePicker(
+        context: pickerContext,
+        initialTime: initialTime,
+      );
+
+      if (picked == null) {
+        return;
+      }
+
+      if (isOpening) {
+        openingTime = picked;
+      } else {
+        closingTime = picked;
+      }
+
+      setDialogState(() {
+        updateHoursText();
+      });
+    }
+
+    showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Restaurant'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Add Restaurant'),
+          scrollable: true,
+          content: SizedBox(
+            width: 420,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _buildSelectedImagePreview(
+                  selectedImageFile,
+                  'No restaurant image selected',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final pickedImage = await _pickImage();
+                          if (pickedImage != null) {
+                            setDialogState(() {
+                              selectedImageFile = pickedImage;
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    selectedImageFile == null
+                        ? 'Choose Restaurant Image'
+                        : 'Change Restaurant Image',
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: nameController,
                   decoration: const InputDecoration(
@@ -360,22 +553,26 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         Icons.location_on,
                         color: Color(0xFF4CAF50),
                       ),
-                      onPressed: () async {
-                        final result = await Navigator.push(
-                          dialogContext,
-                          MaterialPageRoute(
-                            builder: (context) => MapPickerScreen(),
-                          ),
-                        );
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final result = await Navigator.push(
+                                dialogContext,
+                                MaterialPageRoute(
+                                  builder: (context) => MapPickerScreen(),
+                                ),
+                              );
 
-                        if (result != null) {
-                          setState(() {
-                            _restaurantLatitude = result['latitude'];
-                            _restaurantLongitude = result['longitude'];
-                            addressController.text = result['address'];
-                          });
-                        }
-                      },
+                              if (result != null) {
+                                restaurantLatitude =
+                                    result['latitude'] as double?;
+                                restaurantLongitude =
+                                    result['longitude'] as double?;
+                                addressController.text =
+                                    (result['address'] ?? '').toString();
+                                setDialogState(() {});
+                              }
+                            },
                     ),
                   ),
                 ),
@@ -400,14 +597,158 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: hoursController,
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Operating Hours',
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isSubmitting
+                            ? null
+                            : () => pickTime(
+                                isOpening: true,
+                                pickerContext: dialogContext,
+                                setDialogState: setDialogState,
+                              ),
+                        icon: const Icon(Icons.access_time),
+                        label: Text(
+                          openingTime == null
+                              ? 'Opening Time'
+                              : formatTimeOfDay(openingTime!),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isSubmitting
+                            ? null
+                            : () => pickTime(
+                                isOpening: false,
+                                pickerContext: dialogContext,
+                                setDialogState: setDialogState,
+                              ),
+                        icon: const Icon(Icons.access_time_filled),
+                        label: Text(
+                          closingTime == null
+                              ? 'Closing Time'
+                              : formatTimeOfDay(closingTime!),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final name = nameController.text.trim();
+                      final address = addressController.text.trim();
+                      final phone = phoneController.text.trim();
+                      final email = emailController.text.trim();
+                      final hours = hoursController.text.trim();
+
+                      if (name.isEmpty ||
+                          address.isEmpty ||
+                          phone.isEmpty ||
+                          email.isEmpty ||
+                          hours.isEmpty ||
+                          restaurantLatitude == null ||
+                          restaurantLongitude == null ||
+                          selectedImageFile == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Fill all fields, choose location, and select an image.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                      });
+
+                      try {
+                        final imageUrl = await _cloudinaryService
+                            .uploadImageToCloudinary(selectedImageFile!);
+                        final doc = await _restaurantService.addRestaurant(
+                          ownerId: user.uid,
+                          name: name,
+                          address: address,
+                          phone: phone,
+                          email: email,
+                          hours: hours,
+                          isOpen: true,
+                          latitude: restaurantLatitude!,
+                          longitude: restaurantLongitude!,
+                          imageUrl: imageUrl,
+                        );
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedRestaurantId = doc.id;
+                          _selectedRestaurantCache = null;
+                        });
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Restaurant added.')),
+                        );
+                      } catch (error) {
+                        if (!mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to add restaurant: $error'),
+                          ),
+                        );
+                        setDialogState(() {
+                          isSubmitting = false;
+                        });
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add Restaurant'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteRestaurant(_RestaurantSummary restaurant) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Restaurant?'),
+        content: Text(
+          'Delete "${restaurant.name}" and all of its food items, orders, and reviews?',
         ),
         actions: [
           TextButton(
@@ -416,49 +757,22 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           ),
           FilledButton(
             onPressed: () async {
-              final name = nameController.text.trim();
-              final address = addressController.text.trim();
-              final phone = phoneController.text.trim();
-              final email = emailController.text.trim();
-              final hours = hoursController.text.trim();
-
-              if (name.isEmpty ||
-                  address.isEmpty ||
-                  phone.isEmpty ||
-                  email.isEmpty ||
-                  hours.isEmpty ||
-                  _restaurantLatitude == null ||
-                  _restaurantLongitude == null) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Fill all fields including location.'),
-                  ),
-                );
-                return;
-              }
-
               try {
-                final doc = await _restaurantService.addRestaurant(
-                  ownerId: user.uid,
-                  name: name,
-                  address: address,
-                  phone: phone,
-                  email: email,
-                  hours: hours,
-                  isOpen: true,
-                  latitude: _restaurantLatitude!,
-                  longitude: _restaurantLongitude!,
-                );
+                await _restaurantService.deleteRestaurant(restaurant.id);
                 if (!mounted || !dialogContext.mounted) {
                   return;
                 }
-                setState(() {
-                  _selectedRestaurantId = doc.id;
-                  _selectedRestaurantCache = null;
-                });
                 Navigator.pop(dialogContext);
+                setState(() {
+                  if (_selectedRestaurantId == restaurant.id) {
+                    _selectedRestaurantId = '';
+                    _selectedRestaurantCache = null;
+                  }
+                  _ordersSnapshotCache.clear();
+                  _menuSnapshotCache.clear();
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Restaurant added.')),
+                  const SnackBar(content: Text('Restaurant deleted.')),
                 );
               } catch (error) {
                 if (!mounted || !dialogContext.mounted) {
@@ -466,24 +780,18 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 }
                 Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to add restaurant: $error')),
+                  SnackBar(
+                    content: Text('Failed to delete restaurant: $error'),
+                  ),
                 );
               }
             },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
-            ),
-            child: const Text('Add Restaurant'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
-
-    nameController.dispose();
-    addressController.dispose();
-    phoneController.dispose();
-    emailController.dispose();
-    hoursController.dispose();
   }
 
   @override
@@ -491,7 +799,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           'Restaurant Dashboard',
@@ -501,53 +809,90 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('orders')
-                .where('restaurantId', isEqualTo: _selectedRestaurantId)
-                .where('status', isEqualTo: 'new')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final count = snapshot.data?.docs.length ?? 0;
+          if (user != null)
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .snapshots(),
+              builder: (context, userSnapshot) {
+                final userData = userSnapshot.data?.data() ?? {};
+                final notificationsEnabled =
+                    (userData['notificationsEnabled'] as bool?) ?? true;
 
-              return Stack(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      _showNotifications(context, _selectedRestaurantId);
-                    },
-                    icon: const Icon(Icons.notifications_outlined),
-                    tooltip: 'Notifications',
-                  ),
-                  if (count > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
-                        ),
-                        child: Text(
-                          count > 99 ? '99+' : count.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                return StreamBuilder<QuerySnapshot>(
+                  stream:
+                      notificationsEnabled && _selectedRestaurantId.isNotEmpty
+                      ? FirebaseFirestore.instance
+                            .collection('orders')
+                            .where(
+                              'restaurantId',
+                              isEqualTo: _selectedRestaurantId,
+                            )
+                            .where('status', isEqualTo: 'new')
+                            .snapshots()
+                      : null,
+                  builder: (context, snapshot) {
+                    final count = notificationsEnabled
+                        ? (snapshot.data?.docs.where((doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                return data['ownerNotificationSeen'] != true;
+                              }).length ??
+                              0)
+                        : 0;
+
+                    return Stack(
+                      children: [
+                        IconButton(
+                          onPressed: notificationsEnabled
+                              ? () async {
+                                  await _showNotifications(
+                                    context,
+                                    _selectedRestaurantId,
+                                  );
+                                }
+                              : null,
+                          icon: Icon(
+                            Icons.notifications_outlined,
+                            color: notificationsEnabled
+                                ? Colors.white
+                                : Colors.white60,
                           ),
-                          textAlign: TextAlign.center,
+                          tooltip: notificationsEnabled
+                              ? 'Notifications'
+                              : 'Notifications are off',
                         ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+                        if (count > 0)
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              child: Text(
+                                count > 99 ? '99+' : count.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'Menu',
@@ -604,12 +949,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           ? _buildCenteredMessage('Please sign in to view your dashboard.')
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _restaurantService.streamRestaurants(user.uid),
-              builder: (_, snapshot) {
-                if (snapshot.hasData) {
-                  _restaurantsSnapshotCache = snapshot.data;
-                }
-                final docs =
-                    snapshot.data?.docs ?? _restaurantsSnapshotCache?.docs ?? [];
+              builder: (context, snapshot) {
+                final docs = snapshot.data?.docs ?? [];
 
                 if (snapshot.hasError) {
                   return _buildCenteredMessage(
@@ -647,23 +988,19 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 final selected = restaurants.firstWhere(
                   (r) => r.id == selectedId,
                 );
-                if ((!hasSelection || _selectedRestaurantCache?.id != selected.id) &&
-                    !_selectionSyncScheduled) {
-                  _selectionSyncScheduled = true;
+                if (_selectedRestaurantCache?.id != selected.id) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _selectionSyncScheduled = false;
-                    if (!mounted) {
-                      return;
+                    if (mounted) {
+                      setState(() {
+                        _selectedRestaurantCache = selected;
+                        _selectedRestaurantId = selected.id;
+                      });
                     }
-                    setState(() {
-                      _selectedRestaurantCache = selected;
-                      _selectedRestaurantId = selected.id;
-                    });
                   });
                 }
 
                 return SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.only(bottom: 120),
                   child: Column(
                     children: [
                       _RestaurantSwitcher(
@@ -671,33 +1008,38 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         selectedId: selected.id,
                         onChanged: _onRestaurantChanged,
                         onAddRestaurant: _openAddRestaurantDialog,
+                        onDeleteRestaurant: _confirmDeleteRestaurant,
                       ),
                       _RestaurantHeader(
                         restaurantId: selected.id,
                         name: selected.name,
                         address: selected.address,
+                        imageUrl: selected.imageUrl,
                         isOpen: selected.isOpen,
                         onToggleStatus: (isOpen) async {
-                          final messenger = ScaffoldMessenger.of(context);
                           try {
                             await _restaurantService.updateRestaurantStatus(
                               selected.id,
                               isOpen,
                             );
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Restaurant is now ${isOpen ? "Open" : "Closed"}',
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Restaurant is now ${isOpen ? "Open" : "Closed"}',
+                                  ),
+                                  duration: const Duration(seconds: 2),
                                 ),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
+                              );
+                            }
                           } catch (e) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Error updating status: $e'),
-                              ),
-                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error updating status: $e'),
+                                ),
+                              );
+                            }
                           }
                         },
                       ),
@@ -725,9 +1067,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 
   Widget _buildCenteredLoading() {
     return const Center(
-      child: CircularProgressIndicator(
-        color: Color(0xFF4CAF50),
-      ),
+      child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
     );
   }
 
@@ -775,6 +1115,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               .where(
                 (order) =>
                     order.status != _LiveOrderStatus.pickedUp &&
+                    order.status != _LiveOrderStatus.cancelled &&
                     order.lines.isNotEmpty,
               ) // Only show orders with items
               .toList();
@@ -827,6 +1168,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             return _restaurantService.updateMenuItem(item.id, {
               'name': name,
               'description': description,
+              'category': description,
               'price': price,
               'quantityAvailable': quantity,
               'isAvailable': quantity > 0,
@@ -847,6 +1189,7 @@ class _RestaurantHeader extends StatefulWidget {
     required this.restaurantId,
     required this.name,
     required this.address,
+    required this.imageUrl,
     required this.isOpen,
     required this.onToggleStatus,
   });
@@ -854,6 +1197,7 @@ class _RestaurantHeader extends StatefulWidget {
   final String restaurantId;
   final String name;
   final String address;
+  final String imageUrl;
   final bool isOpen;
   final Function(bool) onToggleStatus;
 
@@ -885,6 +1229,22 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         });
   }
 
+  Stream<Map<String, dynamic>> _getRatingStatsStream() {
+    return FirebaseFirestore.instance
+        .collection('restaurants')
+        .doc(widget.restaurantId)
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data() ?? {};
+          final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+          final reviews =
+              (data['reviewCount'] as num?)?.toInt() ??
+              (data['reviews'] as num?)?.toInt() ??
+              0;
+          return {'rating': rating, 'reviews': reviews};
+        });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -906,18 +1266,30 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         children: [
           Row(
             children: [
-              // White Circle Icon
-              Container(
-                width: 62,
-                height: 62,
-                decoration: const BoxDecoration(
+              // Restaurant image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
+                  width: 62,
+                  height: 62,
                   color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.restaurant,
-                  color: Color(0xFF4CAF50),
-                  size: 30,
+                  child: widget.imageUrl.isNotEmpty
+                      ? Image.network(
+                          widget.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.restaurant,
+                              color: Color(0xFF4CAF50),
+                              size: 30,
+                            );
+                          },
+                        )
+                      : const Icon(
+                          Icons.restaurant,
+                          color: Color(0xFF4CAF50),
+                          size: 30,
+                        ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -943,6 +1315,35 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                         color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 14,
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    StreamBuilder<Map<String, dynamic>>(
+                      stream: _getRatingStatsStream(),
+                      builder: (context, snapshot) {
+                        final rating =
+                            snapshot.data?['rating'] as double? ?? 0.0;
+                        final reviews = snapshot.data?['reviews'] as int? ?? 0;
+                        return Row(
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              color: Colors.amber,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              reviews > 0
+                                  ? '${rating.toStringAsFixed(1)} avg ($reviews)'
+                                  : 'No ratings yet',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.95),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -1116,12 +1517,14 @@ class _RestaurantSwitcher extends StatelessWidget {
     required this.selectedId,
     required this.onChanged,
     required this.onAddRestaurant,
+    required this.onDeleteRestaurant,
   });
 
   final List<_RestaurantSummary> restaurants;
   final String selectedId;
   final ValueChanged<String?> onChanged;
   final VoidCallback onAddRestaurant;
+  final ValueChanged<_RestaurantSummary> onDeleteRestaurant;
 
   @override
   Widget build(BuildContext context) {
@@ -1233,6 +1636,24 @@ class _RestaurantSwitcher extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           InkWell(
+            onTap: () => onDeleteRestaurant(selected),
+            borderRadius: BorderRadius.circular(26),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.delete_outline,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          InkWell(
             onTap: onAddRestaurant,
             borderRadius: BorderRadius.circular(26),
             child: Container(
@@ -1245,11 +1666,7 @@ class _RestaurantSwitcher extends StatelessWidget {
               child: const Stack(
                 alignment: Alignment.center,
                 children: [
-                  Icon(
-                    Icons.storefront,
-                    size: 24,
-                    color: Colors.white,
-                  ),
+                  Icon(Icons.storefront, size: 24, color: Colors.white),
                   Positioned(
                     right: 10,
                     bottom: 12,
@@ -1291,7 +1708,11 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
   Widget build(BuildContext context) {
     // Only show active orders (exclude picked up)
     final activeOrders = widget.orders
-        .where((order) => order.status != _LiveOrderStatus.pickedUp)
+        .where(
+          (order) =>
+              order.status != _LiveOrderStatus.pickedUp &&
+              order.status != _LiveOrderStatus.cancelled,
+        )
         .toList();
 
     final total = activeOrders.length;
@@ -1333,6 +1754,8 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
           return const Color(0xFF2E7D32);
         case _LiveOrderStatus.pickedUp:
           return Colors.grey;
+        case _LiveOrderStatus.cancelled:
+          return Colors.red;
       }
     }
 
@@ -1346,6 +1769,8 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
           return 'Ready';
         case _LiveOrderStatus.pickedUp:
           return 'Picked Up';
+        case _LiveOrderStatus.cancelled:
+          return 'Cancelled';
       }
     }
 
@@ -1434,6 +1859,8 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
       );
     }
 
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -1441,12 +1868,12 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'Live Orders',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               const Spacer(),
@@ -1534,12 +1961,16 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF4CAF50) : const Color(0xFFE0E0E0),
+          color: isSelected
+              ? const Color(0xFF4CAF50)
+              : theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(25),
         ),
         child: Text(
@@ -1547,7 +1978,9 @@ class _FilterChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            color: isSelected ? Colors.white : const Color(0xFF757575),
+            color: isSelected
+                ? Colors.white
+                : theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ),
@@ -1587,6 +2020,8 @@ class _OrderDetailsSheet extends StatelessWidget {
         return const Color(0xFF2E7D32);
       case _LiveOrderStatus.pickedUp:
         return Colors.grey;
+      case _LiveOrderStatus.cancelled:
+        return Colors.red;
     }
   }
 
@@ -1600,6 +2035,8 @@ class _OrderDetailsSheet extends StatelessWidget {
         return 'Ready';
       case _LiveOrderStatus.pickedUp:
         return 'Picked Up';
+      case _LiveOrderStatus.cancelled:
+        return 'Cancelled';
     }
   }
 
@@ -1607,6 +2044,24 @@ class _OrderDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtotal = order.subtotal;
     final total = subtotal;
+    final displayOrderId = order.id.length > 10
+        ? 'Order #${order.id.substring(0, 10).toUpperCase()}'
+        : 'Order ${order.id}';
+    final statusChip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _statusColor(order.status).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _statusLabel(order.status),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: _statusColor(order.status),
+        ),
+      ),
+    );
 
     return SafeArea(
       top: false,
@@ -1632,35 +2087,45 @@ class _OrderDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              Row(
-                children: [
-                  Text(
-                    'Order ${order.id}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _statusColor(order.status).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _statusLabel(order.status),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _statusColor(order.status),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 360) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayOrderId,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        statusChip,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          displayOrderId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(width: 12),
+                      statusChip,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 6),
               Text(
@@ -1702,6 +2167,17 @@ class _OrderDetailsSheet extends StatelessWidget {
                       'Pickup: ${order.deliveryAddress}',
                       style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                     ),
+                    if (order.notes.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Instruction: ${order.notes}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[700],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1906,12 +2382,12 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
     final item = widget.menuItems[index];
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete item?'),
         content: Text('Remove "${item.name}" from the menu?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -1919,20 +2395,20 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               widget
                   .onDeleteItem(item)
                   .then((_) {
-                    if (!mounted || !context.mounted) {
+                    if (!mounted || !dialogContext.mounted) {
                       return;
                     }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       const SnackBar(content: Text('Item deleted.')),
                     );
                   })
                   .catchError((error) {
-                    if (!mounted || !context.mounted) {
+                    if (!mounted || !dialogContext.mounted) {
                       return;
                     }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(content: Text('Error deleting item: $error')),
                     );
                   });
@@ -1947,6 +2423,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final availableCount = widget.menuItems
         .where((item) => item.isAvailable)
         .length;
@@ -1958,12 +2435,12 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'Menu Items',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: isDark ? Colors.white : Colors.black,
                 ),
               ),
               const Spacer(),
@@ -1994,7 +2471,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             children: [
               Text(
                 '$availableCount Available • ${widget.menuItems.length - availableCount} Unavailable',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.grey[600],
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -2005,7 +2485,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: Text(
               widget.errorText!,
-              style: TextStyle(color: Colors.grey[400], fontSize: 15),
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.grey[400],
+                fontSize: 15,
+              ),
             ),
           )
         else if (widget.isLoading)
@@ -2019,7 +2502,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               padding: const EdgeInsets.symmetric(vertical: 40),
               child: Text(
                 'No menu items yet.',
-                style: TextStyle(color: Colors.grey[400], fontSize: 15),
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.grey[400],
+                  fontSize: 15,
+                ),
               ),
             ),
           )
@@ -2046,7 +2532,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
   void _showEditDialog(int index) {
     final item = widget.menuItems[index];
     final nameController = TextEditingController(text: item.name);
-    final descriptionController = TextEditingController(text: item.description);
+    final categoryController = TextEditingController(text: item.description);
     final priceController = TextEditingController(text: item.price.toString());
     final quantityController = TextEditingController(
       text: item.quantity.toString(),
@@ -2054,91 +2540,113 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Menu Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Item Name',
-                border: OutlineInputBorder(),
+      builder: (dialogContext) {
+        final media = MediaQuery.of(dialogContext);
+        final maxContentHeight =
+            (media.size.height - media.viewInsets.bottom - 220)
+                .clamp(220.0, media.size.height * 0.6)
+                .toDouble();
+
+        return AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          title: const Text('Edit Menu Item'),
+          content: SizedBox(
+            width: 420,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxContentHeight),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Item Name',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: categoryController,
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Price',
+                        border: OutlineInputBorder(),
+                        prefixText: '₹ ',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: quantityController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Quantity',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Price',
-                border: OutlineInputBorder(),
-                prefixText: '₹ ',
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                final category = categoryController.text.trim();
+                final price =
+                    double.tryParse(priceController.text) ?? item.price;
+                final quantity =
+                    int.tryParse(quantityController.text) ?? item.quantity;
+
+                widget
+                    .onUpdateItem(item, name, category, price, quantity)
+                    .then((_) {
+                      if (!mounted || !dialogContext.mounted) {
+                        return;
+                      }
+                      Navigator.pop(dialogContext);
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text('Item updated successfully!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    })
+                    .catchError((error) {
+                      if (!mounted || !dialogContext.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        SnackBar(content: Text('Error updating item: $error')),
+                      );
+                    });
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                border: OutlineInputBorder(),
-              ),
+              child: const Text('Save'),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-            final description = descriptionController.text.trim();
-              final price = double.tryParse(priceController.text) ?? item.price;
-              final quantity =
-                  int.tryParse(quantityController.text) ?? item.quantity;
-
-              widget
-                  .onUpdateItem(item, name, description, price, quantity)
-                  .then((_) {
-                    if (!mounted || !context.mounted) {
-                      return;
-                    }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Item updated successfully!'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  })
-                  .catchError((error) {
-                    if (!mounted || !context.mounted) {
-                      return;
-                    }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error updating item: $error')),
-                    );
-                  });
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -2159,15 +2667,19 @@ class _MenuItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAvailable
               ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
-              : Colors.grey.withValues(alpha: 0.3),
+              : colorScheme.outline.withValues(alpha: 0.35),
           width: 1,
         ),
         boxShadow: [
@@ -2183,17 +2695,33 @@ class _MenuItemCard extends StatelessWidget {
         child: Row(
           children: [
             // Food Emoji/Icon
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 56,
+                height: 56,
                 color: item.isAvailable
                     ? const Color(0xFFE8F5E9)
-                    : const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(item.emoji, style: const TextStyle(fontSize: 28)),
+                    : colorScheme.surfaceContainerHighest,
+                child: item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              item.emoji,
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                          );
+                        },
+                      )
+                    : Center(
+                        child: Text(
+                          item.emoji,
+                          style: const TextStyle(fontSize: 28),
+                        ),
+                      ),
               ),
             ),
             const SizedBox(width: 12),
@@ -2207,9 +2735,11 @@ class _MenuItemCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: item.isAvailable
-                          ? Colors.black87
-                          : Colors.grey[600],
+                      color: isDark
+                          ? Colors.white
+                          : (item.isAvailable
+                                ? colorScheme.onSurface
+                                : colorScheme.onSurfaceVariant),
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -2219,7 +2749,9 @@ class _MenuItemCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey[600],
+                      color: isDark
+                          ? Colors.white70
+                          : colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -2242,19 +2774,19 @@ class _MenuItemCard extends StatelessWidget {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: Colors.grey[300]!,
+                            color: colorScheme.outline.withValues(alpha: 0.4),
                             width: 1,
                           ),
                         ),
                         child: Text(
                           'Qty: ${item.quantity}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                       ),
@@ -2276,11 +2808,9 @@ class _MenuItemCard extends StatelessWidget {
                     activeThumbColor: const Color(0xFF4CAF50),
                     activeTrackColor: const Color(
                       0xFF4CAF50,
-                    ).withValues(
-                      alpha: 0.4,
-                    ),
-                    inactiveThumbColor: Colors.grey[400],
-                    inactiveTrackColor: Colors.grey[300],
+                    ).withValues(alpha: 0.4),
+                    inactiveThumbColor: colorScheme.outline,
+                    inactiveTrackColor: colorScheme.surfaceContainerHighest,
                   ),
                 ),
                 // Edit & Delete Buttons
@@ -2293,13 +2823,15 @@ class _MenuItemCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(9),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.edit_outlined,
                           size: 18,
-                          color: Colors.grey[700],
+                          color: isDark
+                              ? Colors.white70
+                              : colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -2338,15 +2870,17 @@ class _RestaurantSummary {
     required this.name,
     required this.address,
     required this.isOpen,
+    required this.imageUrl,
   });
 
   final String id;
   final String name;
   final String address;
   final bool isOpen;
+  final String imageUrl;
 }
 
-enum _LiveOrderStatus { newOrder, preparing, ready, pickedUp }
+enum _LiveOrderStatus { newOrder, preparing, ready, pickedUp, cancelled }
 
 class _LiveOrder {
   _LiveOrder({
@@ -2356,6 +2890,7 @@ class _LiveOrder {
     required this.customerName,
     required this.customerPhone,
     required this.deliveryAddress,
+    required this.notes,
     required this.placedAt,
     required this.lines,
   });
@@ -2366,6 +2901,7 @@ class _LiveOrder {
   final String customerName;
   final String customerPhone;
   final String deliveryAddress;
+  final String notes;
   final DateTime placedAt;
   final List<_OrderLine> lines;
 
@@ -2387,6 +2923,7 @@ class _MenuItem {
     required this.id,
     required this.name,
     required this.description,
+    required this.imageUrl,
     required this.price,
     required this.isAvailable,
     required this.category,
@@ -2397,6 +2934,7 @@ class _MenuItem {
   final String id;
   String name;
   String description;
+  final String imageUrl;
   double price;
   bool isAvailable;
   final String category;
@@ -2426,120 +2964,335 @@ void _handleMenuSelection(
   }
 }
 
-void _showNotifications(BuildContext context, String restaurantId) {
-  showDialog(
+Future<void> _showNotifications(
+  BuildContext context,
+  String restaurantId,
+) async {
+  if (restaurantId.isEmpty) {
+    return;
+  }
+
+  String formatTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) {
+      return 'Just now';
+    }
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}m ago';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    }
+    return '${diff.inDays}d ago';
+  }
+
+  Color statusColor(String status) {
+    switch (status) {
+      case 'ready':
+        return const Color(0xFF2E7D32);
+      case 'preparing':
+        return const Color(0xFFEF6C00);
+      case 'pickedUp':
+        return const Color(0xFF1565C0);
+      case 'cancelled':
+        return const Color(0xFFC62828);
+      default:
+        return const Color(0xFF455A64);
+    }
+  }
+
+  IconData statusIcon(String status) {
+    switch (status) {
+      case 'ready':
+        return Icons.notifications_active;
+      case 'preparing':
+        return Icons.soup_kitchen_outlined;
+      case 'pickedUp':
+        return Icons.check_circle_outline;
+      case 'cancelled':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.shopping_bag_outlined;
+    }
+  }
+
+  String statusTitle(String status) {
+    switch (status) {
+      case 'ready':
+        return 'Order Ready';
+      case 'preparing':
+        return 'Preparing Order';
+      case 'pickedUp':
+        return 'Order Picked Up';
+      case 'cancelled':
+        return 'Order Cancelled';
+      default:
+        return 'New Order';
+    }
+  }
+
+  final snapshot = await FirebaseFirestore.instance
+      .collection('orders')
+      .where('restaurantId', isEqualTo: restaurantId)
+      .limit(150)
+      .get();
+
+  final docs = snapshot.docs.toList();
+  docs.sort((a, b) {
+    final aTs = a.data()['createdAt'];
+    final bTs = b.data()['createdAt'];
+    final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(1970);
+    final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(1970);
+    return bDate.compareTo(aDate);
+  });
+
+  final unseenNewDocs = docs.where((doc) {
+    final data = doc.data();
+    return data['status'] == 'new' && data['ownerNotificationSeen'] != true;
+  }).toList();
+
+  final allUpdateDocs = docs.where((doc) {
+    final status = (doc.data()['status'] ?? '').toString();
+    return status.isNotEmpty;
+  }).toList();
+
+  if (!context.mounted) {
+    return;
+  }
+
+  await showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.notifications, color: Color(0xFF2E7D32)),
-          SizedBox(width: 8),
-          Text('Notifications'),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('orders')
-              .where('restaurantId', isEqualTo: restaurantId)
-              .where('status', isEqualTo: 'new')
-              .orderBy('createdAt', descending: true)
-              .limit(10)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+    builder: (context) {
+      Widget buildOrderCard(DocumentSnapshot<Map<String, dynamic>> doc) {
+        final data = doc.data() ?? {};
+        final status = (data['status'] ?? 'new').toString();
+        final foodName = (data['foodName'] ?? 'Item').toString();
+        final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+        final price = (data['price'] as num?)?.toDouble() ?? 0;
+        final total = price * quantity;
+        final createdAt = data['createdAt'] as Timestamp?;
+        final time = createdAt?.toDate() ?? DateTime.now();
+        final color = statusColor(status);
+        final displayId = doc.id.length > 8
+            ? doc.id.substring(0, 8).toUpperCase()
+            : doc.id.toUpperCase();
+
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 8,
+            ),
+            leading: CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.12),
+              child: Icon(statusIcon(status), color: color),
+            ),
+            title: Text(
+              '${statusTitle(status)} #$displayId',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text('Error: ${snapshot.error}'),
-                ),
-              );
-            }
-
-            final docs = snapshot.data?.docs ?? [];
-
-            if (docs.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.notifications_none,
-                        size: 48,
-                        color: Colors.grey[300],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No new orders',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        status.toUpperCase(),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      formatTimeAgo(time),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      Widget buildEmpty(String text) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.notifications_none,
+                  size: 52,
+                  color: Colors.grey[350],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SizedBox(
+          width: double.infinity,
+          height: 600,
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF2E7D32), Color(0xFF43A047)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Color(0x22FFFFFF),
+                        child: Icon(
+                          Icons.notifications_active,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Order Notifications',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              );
-            }
-
-            return ListView.builder(
-              shrinkWrap: true,
-              itemCount: docs.length,
-              itemBuilder: (context, index) {
-                final doc = docs[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final foodName = data['foodName'] ?? 'Item';
-                final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
-                final price = (data['price'] as num?)?.toDouble() ?? 0;
-                final total = price * quantity;
-                final createdAt = data['createdAt'] as Timestamp?;
-                final orderId = doc.id;
-
-                String timeAgo = 'Just now';
-                if (createdAt != null) {
-                  final orderTime = createdAt.toDate();
-                  final diff = DateTime.now().difference(orderTime);
-                  if (diff.inMinutes < 1) {
-                    timeAgo = 'Just now';
-                  } else if (diff.inMinutes < 60) {
-                    timeAgo = '${diff.inMinutes} min ago';
-                  } else if (diff.inHours < 24) {
-                    timeAgo = '${diff.inHours}h ago';
-                  } else {
-                    timeAgo = '${diff.inDays}d ago';
-                  }
-                }
-
-                return _NotificationTile(
-                  icon: Icons.shopping_bag,
-                  title: 'New Order #${orderId.substring(0, 8).toUpperCase()}',
-                  subtitle:
-                      '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
-                  time: timeAgo,
-                  color: const Color(0xFF2E7D32),
-                );
-              },
-            );
-          },
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 2),
+                  child: Text(
+                    'Last updated: ${formatTimeAgo(DateTime.now())}',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0x22333333)),
+                  ),
+                  child: const TabBar(
+                    dividerColor: Colors.transparent,
+                    labelColor: Color(0xFF2E7D32),
+                    unselectedLabelColor: Colors.black54,
+                    indicatorColor: Color(0xFF2E7D32),
+                    tabs: [
+                      Tab(text: 'New Orders'),
+                      Tab(text: 'All Updates'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      unseenNewDocs.isEmpty
+                          ? buildEmpty('No new orders right now.')
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                              itemCount: unseenNewDocs.length,
+                              itemBuilder: (_, i) =>
+                                  buildOrderCard(unseenNewDocs[i]),
+                            ),
+                      allUpdateDocs.isEmpty
+                          ? buildEmpty('No order updates yet.')
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                              itemCount: allUpdateDocs.length,
+                              itemBuilder: (_, i) =>
+                                  buildOrderCard(allUpdateDocs[i]),
+                            ),
+                    ],
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
+      );
+    },
   );
+
+  if (unseenNewDocs.isEmpty) {
+    return;
+  }
+
+  final batch = FirebaseFirestore.instance.batch();
+  for (final doc in unseenNewDocs) {
+    batch.update(doc.reference, {'ownerNotificationSeen': true});
+  }
+  await batch.commit();
 }
 
 void _showRestaurantDetails(
@@ -2563,7 +3316,7 @@ void _showSettings(BuildContext context) {
 void _handleLogout(BuildContext context) {
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       title: const Row(
         children: [
           Icon(Icons.logout, color: Colors.red),
@@ -2574,7 +3327,7 @@ void _handleLogout(BuildContext context) {
       content: const Text('Are you sure you want to logout?'),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(dialogContext),
           child: const Text('Cancel'),
         ),
         FilledButton(
@@ -2582,25 +3335,33 @@ void _handleLogout(BuildContext context) {
             final authService = AuthService();
             try {
               await authService.logout();
+              if (!dialogContext.mounted) {
+                return;
+              }
+              Navigator.pop(dialogContext); // Close dialog
               if (!context.mounted) {
                 return;
               }
-              Navigator.pop(context); // Close dialog
               Navigator.pushReplacementNamed(context, '/entry');
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Logged out successfully'),
+                  duration: Duration(seconds: 3),
                   backgroundColor: Color(0xFF2E7D32),
                 ),
               );
             } catch (e) {
+              if (!dialogContext.mounted) {
+                return;
+              }
+              Navigator.pop(dialogContext);
               if (!context.mounted) {
                 return;
               }
-              Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Error logging out: $e'),
+                  duration: const Duration(seconds: 3),
                   backgroundColor: Colors.red,
                 ),
               );
@@ -2612,44 +3373,6 @@ void _handleLogout(BuildContext context) {
       ],
     ),
   );
-}
-
-// UI Helper Widgets
-class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.time,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String time;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.1),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Text(subtitle),
-          const SizedBox(height: 4),
-          Text(time, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        ],
-      ),
-      isThreeLine: true,
-    );
-  }
 }
 
 // Restaurant Details Dialog
@@ -2719,9 +3442,6 @@ class _RestaurantDetailsDialogState extends State<_RestaurantDetailsDialog> {
         ),
       );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
       setState(() {
         _isSaving = false;
       });
@@ -2924,9 +3644,6 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
         );
       }
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
       setState(() {
         _isSaving = false;
       });
@@ -3089,7 +3806,41 @@ class _SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<_SettingsDialog> {
+  final AuthService _authService = AuthService();
+  final RestaurantService _restaurantService = RestaurantService();
   bool _notificationsEnabled = true;
+  late bool _darkModeEnabled;
+  bool _isDeletingAccount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _darkModeEnabled = ThemeManager.isDarkMode;
+    _loadNotificationPreference();
+  }
+
+  Future<void> _loadNotificationPreference() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final data = doc.data() ?? {};
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notificationsEnabled = (data['notificationsEnabled'] as bool?) ?? true;
+      });
+    } catch (_) {
+      // Keep default true if preference read fails.
+    }
+  }
 
   void _showHelpSupport(BuildContext context) {
     showDialog(
@@ -3155,8 +3906,112 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     );
   }
 
+  Future<void> _confirmDeleteOwnerAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete Owner Account?'),
+            ],
+          ),
+          content: const Text(
+            'This will permanently delete your owner profile and all restaurants under your account. This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Delete Account'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteOwnerAccount();
+    }
+  }
+
+  Future<void> _deleteOwnerAccount() async {
+    if (_isDeletingAccount) {
+      return;
+    }
+
+    setState(() {
+      _isDeletingAccount = true;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('No signed-in owner found.');
+      }
+
+      final ownerRestaurants = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .where('ownerId', isEqualTo: user.uid)
+          .get();
+
+      for (final restaurantDoc in ownerRestaurants.docs) {
+        await _restaurantService.deleteRestaurant(restaurantDoc.id);
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .delete();
+
+      try {
+        await user.delete();
+      } on FirebaseAuthException catch (error) {
+        // If recent login is required, still force sign out and redirect.
+        if (error.code != 'requires-recent-login') {
+          rethrow;
+        }
+      }
+
+      await _authService.logout();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).pushNamedAndRemoveUntil('/entry', (route) => false);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete owner account: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingAccount = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+
     return AlertDialog(
       title: const Row(
         children: [
@@ -3176,14 +4031,68 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             title: const Text('Notifications'),
             subtitle: const Text('Receive order and review alerts'),
             value: _notificationsEnabled,
-            onChanged: (value) {
+            onChanged: (value) async {
+              final previous = _notificationsEnabled;
               setState(() {
                 _notificationsEnabled = value;
               });
-              ScaffoldMessenger.of(context).showSnackBar(
+
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null) {
+                try {
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .set({
+                        'notificationsEnabled': value,
+                      }, SetOptions(merge: true));
+                } catch (error) {
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _notificationsEnabled = previous;
+                  });
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Failed to update notification setting: $error',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+              }
+
+              if (!mounted) {
+                return;
+              }
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(
                     value ? 'Notifications enabled' : 'Notifications disabled',
+                  ),
+                  backgroundColor: const Color(0xFF2E7D32),
+                ),
+              );
+            },
+            activeThumbColor: const Color(0xFF2E7D32),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode, color: Color(0xFF2E7D32)),
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Switch to dark theme'),
+            value: _darkModeEnabled,
+            onChanged: (value) {
+              setState(() {
+                _darkModeEnabled = value;
+              });
+              ThemeManager.toggleTheme(value);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    value ? 'Dark mode enabled' : 'Dark mode disabled',
                   ),
                   backgroundColor: const Color(0xFF2E7D32),
                 ),
@@ -3198,11 +4107,29 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showHelpSupport(context),
           ),
+          const Divider(height: 18),
+          ListTile(
+            leading: _isDeletingAccount
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text(
+              'Delete Owner Account',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+            ),
+            subtitle: const Text(
+              'Deletes your account and all your restaurants',
+            ),
+            onTap: _isDeletingAccount ? null : _confirmDeleteOwnerAccount,
+          ),
         ],
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isDeletingAccount ? null : () => Navigator.pop(context),
           child: const Text('Close'),
         ),
       ],
@@ -3222,39 +4149,6 @@ class _OrderHistorySheet extends StatefulWidget {
 
 class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   String _filterType = 'completed'; // completed, cancelled, all
-
-  // Stable stream references — created once per filter value
-  late Stream<Map<String, Map<String, dynamic>>> _reviewsStream;
-  late Stream<QuerySnapshot> _ordersStream;
-
-  @override
-  void initState() {
-    super.initState();
-    _reviewsStream = _buildReviewsStream();
-    _ordersStream = _buildOrdersStream();
-  }
-
-  @override
-  void didUpdateWidget(_OrderHistorySheet oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.restaurantId != widget.restaurantId) {
-      _reviewsStream = _buildReviewsStream();
-      _ordersStream = _buildOrdersStream();
-    }
-  }
-
-  Stream<Map<String, Map<String, dynamic>>> _buildReviewsStream() {
-    return FirebaseFirestore.instance
-        .collection('reviews')
-        .where('restaurantId', isEqualTo: widget.restaurantId)
-        .snapshots()
-        .map(
-          (snap) => {
-            for (final doc in snap.docs)
-              (doc.data()['orderId'] as String? ?? ''): doc.data(),
-          },
-        );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3319,229 +4213,158 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                   ],
                 ),
               ),
-              // Orders list wrapped with reviews stream
+              // Orders list
               Expanded(
-                child: StreamBuilder<Map<String, Map<String, dynamic>>>(
-                  stream: _reviewsStream,
-                  builder: (context, reviewsSnap) {
-                    final reviewsMap = reviewsSnap.data ?? {};
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: _ordersStream,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                                ConnectionState.waiting &&
-                            !snapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              color: Color(0xFF4CAF50),
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: _getOrdersStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF4CAF50),
+                        ),
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
+
+                    final docs = snapshot.data?.docs ?? [];
+
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.history,
+                              size: 48,
+                              color: Colors.grey[300],
                             ),
-                          );
-                        }
-
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Text('Error: ${snapshot.error}'),
-                          );
-                        }
-
-                        final docs = snapshot.data?.docs ?? [];
-
-                        if (docs.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.history,
-                                  size: 48,
-                                  color: Colors.grey[300],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'No orders found',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey[500],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return ListView.builder(
-                          controller: scrollController,
-                          padding: const EdgeInsets.all(12),
-                          itemCount: docs.length,
-                          itemBuilder: (context, index) {
-                            final doc = docs[index];
-                            final data = doc.data() as Map<String, dynamic>;
-                            final status = data['status'] ?? 'unknown';
-                            final foodName = data['foodName'] ?? 'Item';
-                            final quantity =
-                                (data['quantity'] as num?)?.toInt() ?? 1;
-                            final price =
-                                (data['price'] as num?)?.toDouble() ?? 0;
-                            final createdAt = data['createdAt'] as Timestamp?;
-                            final timestamp =
-                                createdAt?.toDate() ?? DateTime.now();
-                            final customerName =
-                                data['customerName'] ?? 'Customer';
-
-                            final statusColor =
-                                status == 'cancelled' ? Colors.red : Colors.green;
-                            final statusLabel =
-                                status == 'cancelled' ? 'Cancelled' : 'Completed';
-
-                            // Lookup review for this order
-                            final review = reviewsMap[doc.id];
-                            final reviewRating =
-                                (review?['rating'] as num?)?.toInt() ?? 0;
-
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.white,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(
-                                      top: Radius.circular(24),
-                                    ),
-                                  ),
-                                  builder: (_) => _HistoryOrderDetailsSheet(
-                                    orderId: doc.id,
-                                    orderData: data,
-                                    review: review,
-                                  ),
-                                );
-                              },
-                              child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey[200]!),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No orders found',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[500],
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final status = data['status'] ?? 'unknown';
+                        final foodName = data['foodName'] ?? 'Item';
+                        final quantity =
+                            (data['quantity'] as num?)?.toInt() ?? 1;
+                        final price = (data['price'] as num?)?.toDouble() ?? 0;
+                        final rating =
+                            (data['rating'] as num?)?.toDouble() ?? 0;
+                        final reviewComment =
+                            (data['reviewComment'] as String? ?? '').trim();
+                        final createdAt = data['createdAt'] as Timestamp?;
+                        final timestamp = createdAt?.toDate() ?? DateTime.now();
+
+                        final statusColor = status == 'cancelled'
+                            ? Colors.red
+                            : Colors.green;
+                        final statusLabel = status == 'cancelled'
+                            ? 'Cancelled'
+                            : 'Completed';
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          foodName,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                  Expanded(
+                                    child: Text(
+                                      foodName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: statusColor.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          statusLabel,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: statusColor,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    customerName,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[700],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Qty: $quantity × ₹${price.toStringAsFixed(0)}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
-                                        ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      statusLabel,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: statusColor,
                                       ),
-                                      Text(
-                                        'Total: ₹${(price * quantity).toStringAsFixed(0)}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF4CAF50),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        _formatDateTime(timestamp),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey[500],
-                                        ),
-                                      ),
-                                      if (review != null)
-                                        Row(
-                                          children: [
-                                            ...List.generate(
-                                              5,
-                                              (i) => Icon(
-                                                i < reviewRating
-                                                    ? Icons.star
-                                                    : Icons.star_border,
-                                                color: Colors.amber,
-                                                size: 13,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            const Icon(
-                                              Icons.chevron_right,
-                                              size: 16,
-                                              color: Colors.grey,
-                                            ),
-                                          ],
-                                        )
-                                      else
-                                        const Icon(
-                                          Icons.chevron_right,
-                                          size: 16,
-                                          color: Colors.grey,
-                                        ),
-                                    ],
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                            );
-                          },
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Qty: $quantity × ₹${price.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  Text(
+                                    'Total: ₹${(price * quantity).toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF4CAF50),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _formatDateTime(timestamp),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                              if (status == 'pickedUp')
+                                _OrderReviewBlock(
+                                  orderId: doc.id,
+                                  initialRating: rating,
+                                  initialComment: reviewComment,
+                                ),
+                            ],
+                          ),
                         );
                       },
                     );
@@ -3558,12 +4381,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   Widget _buildFilterTab(String label, String value) {
     final isSelected = _filterType == value;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _filterType = value;
-          _ordersStream = _buildOrdersStream();
-        });
-      },
+      onTap: () => setState(() => _filterType = value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
@@ -3584,7 +4402,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     );
   }
 
-  Stream<QuerySnapshot> _buildOrdersStream() {
+  Stream<QuerySnapshot> _getOrdersStream() {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('orders')
         .where('restaurantId', isEqualTo: widget.restaurantId);
@@ -3620,308 +4438,95 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   }
 }
 
-class _HistoryOrderDetailsSheet extends StatelessWidget {
-  const _HistoryOrderDetailsSheet({
+class _OrderReviewBlock extends StatelessWidget {
+  const _OrderReviewBlock({
     required this.orderId,
-    required this.orderData,
-    required this.review,
+    required this.initialRating,
+    required this.initialComment,
   });
 
   final String orderId;
-  final Map<String, dynamic> orderData;
-  final Map<String, dynamic>? review;
-
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final diff = now.difference(dateTime);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-  }
+  final double initialRating;
+  final String initialComment;
 
   @override
   Widget build(BuildContext context) {
-    final foodName = orderData['foodName'] ?? 'Item';
-    final quantity = (orderData['quantity'] as num?)?.toInt() ?? 1;
-    final price = (orderData['price'] as num?)?.toDouble() ?? 0.0;
-    final customerName = orderData['customerName'] ?? 'Customer';
-    final customerPhone = orderData['customerPhone'] ?? 'N/A';
-    final deliveryAddress = orderData['deliveryAddress'] ?? 'N/A';
-    final status = orderData['status'] ?? 'pickedUp';
-    final createdAt = orderData['createdAt'] as Timestamp?;
-    final timestamp = createdAt?.toDate() ?? DateTime.now();
-    final total = price * quantity;
+    final hasInitial = initialRating > 0 || initialComment.isNotEmpty;
 
-    final statusColor = status == 'cancelled' ? Colors.red : Colors.green;
-    final statusLabel = status == 'cancelled' ? 'Cancelled' : 'Completed';
+    if (hasInitial) {
+      return _ReviewContent(rating: initialRating, comment: initialComment);
+    }
 
-    final reviewRating = (review?['rating'] as num?)?.toInt() ?? 0;
-    final reviewComment = (review?['comment'] as String? ?? '').trim();
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('reviews')
+          .where('orderId', isEqualTo: orderId)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final doc = snapshot.data?.docs.isNotEmpty == true
+            ? snapshot.data!.docs.first
+            : null;
+        final data = doc?.data() ?? {};
+        final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+        final comment = (data['comment'] as String? ?? '').trim();
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 16,
-          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        if (rating <= 0 && comment.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return _ReviewContent(rating: rating, comment: comment);
+      },
+    );
+  }
+}
+
+class _ReviewContent extends StatelessWidget {
+  const _ReviewContent({required this.rating, required this.comment});
+
+  final double rating;
+  final String comment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 48,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
+              const Text(
+                'Customer review:',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               ),
-              // Title row
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      foodName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      statusLabel,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: statusColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Placed ${_formatDateTime(timestamp)}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              // Customer details
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.black.withValues(alpha: 0.06),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Customer Details',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text('Name: $customerName',
-                        style: const TextStyle(fontSize: 13)),
-                    const SizedBox(height: 6),
-                    Text('Phone: $customerPhone',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[700])),
-                    const SizedBox(height: 6),
-                    Text('Pickup: $deliveryAddress',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[700])),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Order item
-              const Text('Items',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.black.withValues(alpha: 0.04),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '$quantity',
-                        style:
-                            const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        foodName,
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    Text(
-                      '₹${total.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.black.withValues(alpha: 0.06),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Total',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '₹${total.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Review section
-              if (review != null) ...[
-                const SizedBox(height: 20),
-                const Text(
-                  'Customer Review',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.amber[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Stars
-                      Row(
-                        children: [
-                          ...List.generate(
-                            5,
-                            (i) => Icon(
-                              i < reviewRating
-                                  ? Icons.star
-                                  : Icons.star_border,
-                              color: Colors.amber,
-                              size: 26,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            ['', 'Poor', 'Fair', 'Good', 'Very Good',
-                                'Excellent'][reviewRating.clamp(0, 5)],
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.amber[800],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (reviewComment.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          '"$reviewComment"',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[800],
-                            fontStyle: FontStyle.italic,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ] else if (status == 'pickedUp') ...[
-                const SizedBox(height: 20),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.rate_review_outlined,
-                          color: Colors.grey[400], size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'No review yet',
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+              const SizedBox(width: 8),
+              ...List.generate(5, (i) {
+                final star = i + 1;
+                final icon = star <= rating ? Icons.star : Icons.star_border;
+                return Icon(icon, size: 14, color: Colors.amber);
+              }),
+              if (rating > 0) ...[
+                const SizedBox(width: 6),
+                Text(
+                  rating.toStringAsFixed(1),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
             ],
           ),
-        ),
+          if (comment.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                comment,
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -41,6 +41,8 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   double? _restaurantLatitude;
   double? _restaurantLongitude;
   String? _restaurantAddress;
+  String? _restaurantImageUrl;
+  bool _restaurantIsOpen = true;
 
   static const Color _primaryColor = Color(0xFF2E7D32);
   static const Color _lightGrey = Color(0xFFF5F5F5);
@@ -98,6 +100,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           widget.restaurantId,
           item.id,
           item.name,
+          item.imageUrl,
         );
         if (!mounted) {
           return;
@@ -138,10 +141,39 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           _restaurantLatitude = data?['latitude'];
           _restaurantLongitude = data?['longitude'];
           _restaurantAddress = data?['address'];
+          _restaurantImageUrl = data?['imageUrl'];
+          _restaurantIsOpen = data?['isOpen'] == true;
         });
       }
     } catch (e) {
       // Silently fail
+    }
+  }
+
+  Future<bool> _isRestaurantOpen() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .doc(widget.restaurantId)
+          .get();
+      if (!doc.exists) {
+        if (mounted) {
+          setState(() {
+            _restaurantIsOpen = false;
+          });
+        }
+        return false;
+      }
+
+      final isOpen = doc.data()?['isOpen'] == true;
+      if (mounted && isOpen != _restaurantIsOpen) {
+        setState(() {
+          _restaurantIsOpen = isOpen;
+        });
+      }
+      return isOpen;
+    } catch (_) {
+      return _restaurantIsOpen;
     }
   }
 
@@ -188,7 +220,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: backgroundColor),
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+        backgroundColor: backgroundColor,
+      ),
     );
   }
 
@@ -204,7 +240,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         .snapshots();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: itemsStream,
         builder: (context, snapshot) {
@@ -227,11 +263,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
           // Filter items
           final filteredItems = items.where((item) {
-            final matchesSearch = _searchQuery.isEmpty ||
-                item.name
-                    .toLowerCase()
-                    .startsWith(_searchQuery.toLowerCase());
-            final matchesCategory = _selectedCategory == 'All' ||
+            final matchesSearch =
+                _searchQuery.isEmpty ||
+                item.name.toLowerCase().startsWith(_searchQuery.toLowerCase());
+            final matchesCategory =
+                _selectedCategory == 'All' ||
                 item.description == _selectedCategory;
             return matchesSearch && matchesCategory;
           }).toList();
@@ -314,6 +350,15 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _restaurantIsOpen ? 'Open now' : 'Closed',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _restaurantIsOpen ? Colors.green[100] : Colors.red[100],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -325,6 +370,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Widget _buildSearchBar() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final inputFill = isDark ? const Color(0xFF2A2A2A) : _lightGrey;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: TextField(
@@ -342,10 +391,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         },
         decoration: InputDecoration(
           hintText: 'Search for items...',
-          prefixIcon: const Icon(Icons.search, color: _mediumGrey),
+          prefixIcon: Icon(Icons.search, color: theme.hintColor),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, color: _mediumGrey),
+                  icon: Icon(Icons.clear, color: theme.hintColor),
                   onPressed: () {
                     _searchController.clear();
                     setState(() => _searchQuery = '');
@@ -362,13 +411,15 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           ),
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
           filled: true,
-          fillColor: _lightGrey,
+          fillColor: inputFill,
         ),
       ),
     );
   }
 
   Widget _buildCategoryFilter(List<String> categories) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SingleChildScrollView(
@@ -384,10 +435,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                 onSelected: (selected) {
                   setState(() => _selectedCategory = category);
                 },
-                backgroundColor: Colors.white,
+                backgroundColor: theme.cardColor,
                 selectedColor: _primaryColor,
                 labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black,
+                  color: isSelected
+                      ? Colors.white
+                      : theme.colorScheme.onSurface,
                   fontWeight: FontWeight.w500,
                 ),
                 side: BorderSide(
@@ -413,6 +466,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   Widget _buildFoodItemCard(FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
     final isFavorite = _favoriteFoodItemIds.contains(item.id);
+    final theme = Theme.of(context);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -425,17 +479,29 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Food icon/image placeholder
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: _lightGrey,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.fastfood_outlined,
-                color: _mediumGrey,
-                size: 40,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 80,
+                height: 80,
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.fastfood_outlined,
+                            color: _mediumGrey,
+                            size: 40,
+                          );
+                        },
+                      )
+                    : const Icon(
+                        Icons.fastfood_outlined,
+                        color: _mediumGrey,
+                        size: 40,
+                      ),
               ),
             ),
             const SizedBox(width: 12),
@@ -514,7 +580,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
   Widget _buildAddButton(FoodItem item, bool isSoldOut) {
     return ElevatedButton.icon(
-      onPressed: isSoldOut ? null : () => _startCheckout(item),
+      onPressed: (isSoldOut || !_restaurantIsOpen)
+          ? null
+          : () => _startCheckout(item),
       icon: const Icon(Icons.add, size: 16),
       label: const Text('Reserve'),
       style: ElevatedButton.styleFrom(
@@ -552,7 +620,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             ),
           ),
           InkWell(
-            onTap: quantity < item.quantityAvailable
+            onTap: _restaurantIsOpen && quantity < item.quantityAvailable
                 ? () => _addToCart(item)
                 : null,
             child: Padding(
@@ -560,7 +628,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               child: Icon(
                 Icons.add,
                 size: 16,
-                color: quantity < item.quantityAvailable
+                color: _restaurantIsOpen && quantity < item.quantityAvailable
                     ? _primaryColor
                     : Colors.grey[300],
               ),
@@ -590,6 +658,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               restaurantId: '',
               name: '',
               description: '',
+              imageUrl: '',
               price: 0,
               quantityAvailable: 0,
               isAvailable: false,
@@ -602,9 +671,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: ElevatedButton(
-            onPressed: _checkoutCart,
+            onPressed: _restaurantIsOpen ? _checkoutCart : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: _primaryColor,
+              disabledBackgroundColor: Colors.grey[300],
               minimumSize: const Size(double.infinity, 50),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -631,7 +701,9 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                   ),
                 ),
                 Text(
-                  'Checkout • ₹${totalPrice.toStringAsFixed(0)}',
+                  _restaurantIsOpen
+                      ? 'Checkout • ₹${totalPrice.toStringAsFixed(0)}'
+                      : 'Restaurant is closed',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -647,6 +719,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Future<void> _checkoutCart() async {
+    final isOpen = await _isRestaurantOpen();
+    if (!isOpen) {
+      _showSnackBar('This restaurant is currently closed.');
+      return;
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _showSnackBar('Please sign in to checkout.');
@@ -682,6 +760,8 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       }
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final orderGroupId = FirebaseFirestore.instance.collection('orders').doc().id;
+
         for (final entry in _cartItems.value.entries) {
           final itemId = entry.key;
           final quantity = entry.value;
@@ -693,6 +773,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               restaurantId: '',
               name: '',
               description: '',
+              imageUrl: '',
               price: 0,
               quantityAvailable: 0,
               isAvailable: false,
@@ -726,12 +807,18 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
               .collection('orders')
               .doc();
           transaction.set(orderRef, {
+            'orderGroupId': orderGroupId,
             'restaurantId': widget.restaurantId,
+            'restaurantName': widget.restaurantName,
+            'restaurantAddress': _restaurantAddress ?? '',
+            'restaurantImageUrl': _restaurantImageUrl ?? '',
             'foodItemId': itemId,
             'foodName': item.name,
+            'imageUrl': item.imageUrl,
             'price': item.price,
             'quantity': quantity,
             'userId': user.uid,
+            'ownerNotificationSeen': false,
             'status': 'new',
             'userLocation': {
               'latitude': userLocation['latitude'],
@@ -745,7 +832,10 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
       _cartItems.value = {};
 
-      _showSnackBar('✓ Order placed successfully!', backgroundColor: _primaryColor);
+      _showSnackBar(
+        '✓ Order placed successfully!',
+        backgroundColor: _primaryColor,
+      );
       if (!mounted) {
         return;
       }
@@ -770,6 +860,16 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Future<void> _startCheckout(FoodItem item) async {
+    final isOpen = await _isRestaurantOpen();
+    if (!mounted) {
+      return;
+    }
+
+    if (!isOpen) {
+      _showSnackBar('This restaurant is currently closed.');
+      return;
+    }
+
     final result = await Navigator.push<CheckoutResult>(
       context,
       MaterialPageRoute(
@@ -799,6 +899,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     String? notes,
     Map<String, dynamic>? locationOverride,
   }) async {
+    final isOpen = await _isRestaurantOpen();
+    if (!isOpen) {
+      _showSnackBar('This restaurant is currently closed.');
+      return;
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _showSnackBar('Please sign in to reserve.');
@@ -865,6 +971,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       }
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final orderGroupId = FirebaseFirestore.instance.collection('orders').doc().id;
         final itemRef = FirebaseFirestore.instance
             .collection('foodItems')
             .doc(item.id);
@@ -894,9 +1001,14 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
         final orderRef = FirebaseFirestore.instance.collection('orders').doc();
         transaction.set(orderRef, {
+          'orderGroupId': orderGroupId,
           'restaurantId': widget.restaurantId,
+          'restaurantName': widget.restaurantName,
+          'restaurantAddress': _restaurantAddress ?? '',
+          'restaurantImageUrl': _restaurantImageUrl ?? '',
           'foodItemId': item.id,
           'foodName': item.name,
+          'imageUrl': item.imageUrl,
           'price': item.price,
           'quantity': quantity,
           'userId': user.uid,
@@ -904,6 +1016,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           'customerPhone': customerPhone,
           'deliveryAddress': 'Pickup',
           'notes': notes,
+          'ownerNotificationSeen': false,
           'status': 'new',
           'userLocation': {
             'latitude': userLocation['latitude'],
@@ -928,8 +1041,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.restaurantName),
-        backgroundColor: _primaryColor,
-        foregroundColor: Colors.white,
       ),
       body: Center(
         child: Column(
@@ -951,8 +1062,6 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.restaurantName),
-        backgroundColor: _primaryColor,
-        foregroundColor: Colors.white,
       ),
       body: Center(
         child: Column(

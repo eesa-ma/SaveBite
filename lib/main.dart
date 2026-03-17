@@ -7,10 +7,12 @@ import 'package:save_bite/screens/initial_screen.dart'; // Import the InitialScr
 import 'package:save_bite/screens/owner_dashboard.dart';
 import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
+import 'package:save_bite/screens/reset_password_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';
 import 'package:save_bite/screens/profile_sync_screen.dart';
 import 'package:save_bite/screens/my_reservations_screen.dart';
 import 'package:save_bite/screens/favorites_screen.dart';
+import 'package:save_bite/screens/notifications_screen.dart';
 import 'package:save_bite/utils/theme_manager.dart';
 
 void main() async {
@@ -33,10 +35,20 @@ class MyApp extends StatelessWidget {
       useMaterial3: true,
     );
 
+    final colorScheme = base.colorScheme;
+
     return base.copyWith(
-      scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
+      scaffoldBackgroundColor: isDark
+          ? const Color(0xFF121212)
+          : const Color(0xFFF5F5F5),
+      textTheme: base.textTheme.apply(
+        bodyColor: colorScheme.onSurface,
+        displayColor: colorScheme.onSurface,
+      ),
       appBarTheme: AppBarTheme(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFF2E7D32),
+        backgroundColor: isDark
+            ? const Color(0xFF1E1E1E)
+            : const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         centerTitle: false,
         elevation: 0,
@@ -44,6 +56,33 @@ class MyApp extends StatelessWidget {
       cardTheme: CardThemeData(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        titleTextStyle: TextStyle(
+          color: colorScheme.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
+        contentTextStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        textStyle: TextStyle(color: colorScheme.onSurface),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      listTileTheme: ListTileThemeData(
+        textColor: colorScheme.onSurface,
+        iconColor: colorScheme.primary,
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+        selectedColor: const Color(0xFF2E7D32),
+        labelStyle: TextStyle(color: colorScheme.onSurface),
+        secondaryLabelStyle: const TextStyle(color: Colors.white),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -55,7 +94,9 @@ class MyApp extends StatelessWidget {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade900,
+        backgroundColor: isDark
+            ? const Color(0xFF2A2A2A)
+            : Colors.grey.shade900,
         contentTextStyle: const TextStyle(color: Colors.white),
       ),
     );
@@ -76,6 +117,7 @@ class MyApp extends StatelessWidget {
           home: const InitialScreen(),
           routes: {
             '/login': (context) => const SignupScreen(),
+            '/reset-password': (context) => const ResetPasswordScreen(),
             '/home': (context) => const HomeScreen(),
             '/entry': (context) => const EntryScreen(),
             '/owner': (context) => const OwnerDashboard(),
@@ -83,6 +125,7 @@ class MyApp extends StatelessWidget {
             '/admin': (context) => const AdminDashboard(),
             '/profile': (context) => const ProfileScreen(),
             '/favorites': (context) => const FavoritesScreen(),
+            '/notifications': (context) => const NotificationsScreen(),
             '/profile-sync': (context) => const ProfileSyncScreen(),
             '/reservations': (context) => const MyReservationsScreen(),
           },

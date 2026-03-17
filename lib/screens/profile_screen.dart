@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:save_bite/screens/favorites_screen.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 
@@ -14,6 +15,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   Map<String, dynamic>? userData;
   bool isLoading = true;
+  bool _isDeletingAccount = false;
 
   @override
   void initState() {
@@ -105,7 +107,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (updatedName.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Name cannot be empty.')),
+        const SnackBar(
+          content: Text('Name cannot be empty.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
@@ -117,19 +122,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       await _loadUserData();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully.')),
+        const SnackBar(
+          content: Text('Profile updated successfully.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to update profile: $e')),
+        SnackBar(
+          content: Text('Failed to update profile: $e'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
 
   void _openFavorites() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const FavoritesScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const FavoritesScreen()));
   }
 
   void _showHelp() {
@@ -154,6 +165,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _authService.logout();
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/entry', (r) => false);
+    }
+  }
+
+  Future<void> _deleteQueryInBatches(Query<Map<String, dynamic>> query) async {
+    while (true) {
+      final snapshot = await query.limit(400).get();
+      if (snapshot.docs.isEmpty) {
+        break;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (snapshot.docs.length < 400) {
+        break;
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    if (_isDeletingAccount) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Account?'),
+          ],
+        ),
+        content: const Text(
+          'This will permanently delete your account and your related data (orders, favorites, and reviews). This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteCustomerAccount();
+    }
+  }
+
+  Future<void> _deleteCustomerAccount() async {
+    setState(() {
+      _isDeletingAccount = true;
+    });
+
+    try {
+      final user = _authService.getCurrentUser();
+      if (user == null) {
+        throw Exception('No signed-in user found.');
+      }
+
+      // Delete customer-owned documents first.
+      await _deleteQueryInBatches(
+        FirebaseFirestore.instance
+            .collection('orders')
+            .where('userId', isEqualTo: user.uid),
+      );
+      await _deleteQueryInBatches(
+        FirebaseFirestore.instance
+            .collection('reviews')
+            .where('userId', isEqualTo: user.uid),
+      );
+
+      final favoritesDocs = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('favorites')
+          .get();
+      for (final doc in favoritesDocs.docs) {
+        await doc.reference.delete();
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .delete();
+
+      try {
+        await user.delete();
+      } on FirebaseAuthException catch (error) {
+        // If recent login is required, still force sign out and route away.
+        if (error.code != 'requires-recent-login') {
+          rethrow;
+        }
+      }
+
+      await _authService.logout();
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pushNamedAndRemoveUntil('/entry', (r) => false);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete account: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingAccount = false;
+        });
+      }
     }
   }
 
@@ -307,6 +445,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.logout,
                       title: 'Logout',
                       onTap: _logout,
+                      isDestructive: true,
+                    ),
+                    _buildMenuItem(
+                      icon: _isDeletingAccount
+                          ? Icons.hourglass_top
+                          : Icons.delete_forever,
+                      title: _isDeletingAccount
+                          ? 'Deleting account...'
+                          : 'Delete Account',
+                      onTap: _isDeletingAccount ? () {} : _confirmDeleteAccount,
                       isDestructive: true,
                     ),
                   ]),
