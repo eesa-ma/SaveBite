@@ -66,11 +66,17 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       }
       await _loadFavorites();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Removed from favorites.')),
+        const SnackBar(
+          content: Text('Removed from favorites.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to remove favorite: $e')),
+        SnackBar(
+          content: Text('Failed to remove favorite: $e'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -84,11 +90,17 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       }
       await _loadFavorites();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Removed from favorites.')),
+        const SnackBar(
+          content: Text('Removed from favorites.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to remove favorite: $e')),
+        SnackBar(
+          content: Text('Failed to remove favorite: $e'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }

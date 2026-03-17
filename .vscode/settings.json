@@ -1,3 +1,10 @@
 {
-    "cmake.sourceDirectory": "D:/S6 Project/save_bite/linux"
+    "cmake.sourceDirectory": "D:/S6 Project/save_bite/linux",
+    "java.import.exclusions": [
+        "**/android/**",
+        "**/.gradle/**",
+        "**/build/**"
+    ],
+    "java.import.gradle.enabled": false,
+    "java.import.maven.enabled": false
 }

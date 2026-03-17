@@ -39,6 +39,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         return _LiveOrderStatus.ready;
       case 'pickedUp':
         return _LiveOrderStatus.pickedUp;
+      case 'cancelled':
+        return _LiveOrderStatus.cancelled;
       default:
         return _LiveOrderStatus.newOrder;
     }
@@ -54,6 +56,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         return 'ready';
       case _LiveOrderStatus.pickedUp:
         return 'pickedUp';
+      case _LiveOrderStatus.cancelled:
+        return 'cancelled';
     }
   }
 
@@ -142,6 +146,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       customerName: data['customerName'] ?? 'Customer',
       customerPhone: data['customerPhone'] ?? 'N/A',
       deliveryAddress: data['deliveryAddress'] ?? 'Address not set',
+      notes: (data['notes'] ?? '').toString(),
       placedAt: placedAt,
       lines: lines,
     );
@@ -545,10 +550,51 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: hoursController,
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Operating Hours',
                     border: OutlineInputBorder(),
                   ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isSubmitting
+                            ? null
+                            : () => pickTime(
+                                isOpening: true,
+                                pickerContext: dialogContext,
+                                setDialogState: setDialogState,
+                              ),
+                        icon: const Icon(Icons.access_time),
+                        label: Text(
+                          openingTime == null
+                              ? 'Opening Time'
+                              : formatTimeOfDay(openingTime!),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isSubmitting
+                            ? null
+                            : () => pickTime(
+                                isOpening: false,
+                                pickerContext: dialogContext,
+                                setDialogState: setDialogState,
+                              ),
+                        icon: const Icon(Icons.access_time_filled),
+                        label: Text(
+                          closingTime == null
+                              ? 'Closing Time'
+                              : formatTimeOfDay(closingTime!),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -706,7 +752,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           'Restaurant Dashboard',
@@ -716,53 +762,90 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('orders')
-                .where('restaurantId', isEqualTo: _selectedRestaurantId)
-                .where('status', isEqualTo: 'new')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final count = snapshot.data?.docs.length ?? 0;
+          if (user != null)
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .snapshots(),
+              builder: (context, userSnapshot) {
+                final userData = userSnapshot.data?.data() ?? {};
+                final notificationsEnabled =
+                    (userData['notificationsEnabled'] as bool?) ?? true;
 
-              return Stack(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      _showNotifications(context, _selectedRestaurantId);
-                    },
-                    icon: const Icon(Icons.notifications_outlined),
-                    tooltip: 'Notifications',
-                  ),
-                  if (count > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
-                        ),
-                        child: Text(
-                          count > 99 ? '99+' : count.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                return StreamBuilder<QuerySnapshot>(
+                  stream:
+                      notificationsEnabled && _selectedRestaurantId.isNotEmpty
+                      ? FirebaseFirestore.instance
+                            .collection('orders')
+                            .where(
+                              'restaurantId',
+                              isEqualTo: _selectedRestaurantId,
+                            )
+                            .where('status', isEqualTo: 'new')
+                            .snapshots()
+                      : null,
+                  builder: (context, snapshot) {
+                    final count = notificationsEnabled
+                        ? (snapshot.data?.docs.where((doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                return data['ownerNotificationSeen'] != true;
+                              }).length ??
+                              0)
+                        : 0;
+
+                    return Stack(
+                      children: [
+                        IconButton(
+                          onPressed: notificationsEnabled
+                              ? () async {
+                                  await _showNotifications(
+                                    context,
+                                    _selectedRestaurantId,
+                                  );
+                                }
+                              : null,
+                          icon: Icon(
+                            Icons.notifications_outlined,
+                            color: notificationsEnabled
+                                ? Colors.white
+                                : Colors.white60,
                           ),
-                          textAlign: TextAlign.center,
+                          tooltip: notificationsEnabled
+                              ? 'Notifications'
+                              : 'Notifications are off',
                         ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+                        if (count > 0)
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              child: Text(
+                                count > 99 ? '99+' : count.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'Menu',
@@ -985,6 +1068,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               .where(
                 (order) =>
                     order.status != _LiveOrderStatus.pickedUp &&
+                    order.status != _LiveOrderStatus.cancelled &&
                     order.lines.isNotEmpty,
               ) // Only show orders with items
               .toList();
@@ -1577,7 +1661,11 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
   Widget build(BuildContext context) {
     // Only show active orders (exclude picked up)
     final activeOrders = widget.orders
-        .where((order) => order.status != _LiveOrderStatus.pickedUp)
+        .where(
+          (order) =>
+              order.status != _LiveOrderStatus.pickedUp &&
+              order.status != _LiveOrderStatus.cancelled,
+        )
         .toList();
 
     final total = activeOrders.length;
@@ -1619,6 +1707,8 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
           return const Color(0xFF2E7D32);
         case _LiveOrderStatus.pickedUp:
           return Colors.grey;
+        case _LiveOrderStatus.cancelled:
+          return Colors.red;
       }
     }
 
@@ -1632,6 +1722,8 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
           return 'Ready';
         case _LiveOrderStatus.pickedUp:
           return 'Picked Up';
+        case _LiveOrderStatus.cancelled:
+          return 'Cancelled';
       }
     }
 
@@ -1720,6 +1812,8 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
       );
     }
 
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -1727,12 +1821,12 @@ class _LiveOrdersBarState extends State<_LiveOrdersBar> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'Live Orders',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               const Spacer(),
@@ -1820,12 +1914,16 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF4CAF50) : const Color(0xFFE0E0E0),
+          color: isSelected
+              ? const Color(0xFF4CAF50)
+              : theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(25),
         ),
         child: Text(
@@ -1833,7 +1931,9 @@ class _FilterChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            color: isSelected ? Colors.white : const Color(0xFF757575),
+            color: isSelected
+                ? Colors.white
+                : theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ),
@@ -1873,6 +1973,8 @@ class _OrderDetailsSheet extends StatelessWidget {
         return const Color(0xFF2E7D32);
       case _LiveOrderStatus.pickedUp:
         return Colors.grey;
+      case _LiveOrderStatus.cancelled:
+        return Colors.red;
     }
   }
 
@@ -1886,6 +1988,8 @@ class _OrderDetailsSheet extends StatelessWidget {
         return 'Ready';
       case _LiveOrderStatus.pickedUp:
         return 'Picked Up';
+      case _LiveOrderStatus.cancelled:
+        return 'Cancelled';
     }
   }
 
@@ -2016,6 +2120,17 @@ class _OrderDetailsSheet extends StatelessWidget {
                       'Pickup: ${order.deliveryAddress}',
                       style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                     ),
+                    if (order.notes.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Instruction: ${order.notes}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[700],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -2261,6 +2376,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final availableCount = widget.menuItems
         .where((item) => item.isAvailable)
         .length;
@@ -2272,12 +2388,12 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'Menu Items',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: isDark ? Colors.white : Colors.black,
                 ),
               ),
               const Spacer(),
@@ -2308,7 +2424,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             children: [
               Text(
                 '$availableCount Available • ${widget.menuItems.length - availableCount} Unavailable',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.grey[600],
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -2319,7 +2438,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: Text(
               widget.errorText!,
-              style: TextStyle(color: Colors.grey[400], fontSize: 15),
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.grey[400],
+                fontSize: 15,
+              ),
             ),
           )
         else if (widget.isLoading)
@@ -2333,7 +2455,10 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
               padding: const EdgeInsets.symmetric(vertical: 40),
               child: Text(
                 'No menu items yet.',
-                style: TextStyle(color: Colors.grey[400], fontSize: 15),
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.grey[400],
+                  fontSize: 15,
+                ),
               ),
             ),
           )
@@ -2495,15 +2620,19 @@ class _MenuItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAvailable
               ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
-              : Colors.grey.withValues(alpha: 0.3),
+              : colorScheme.outline.withValues(alpha: 0.35),
           width: 1,
         ),
         boxShadow: [
@@ -2559,9 +2688,11 @@ class _MenuItemCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: item.isAvailable
-                          ? Colors.black87
-                          : Colors.grey[600],
+                      color: isDark
+                          ? Colors.white
+                          : (item.isAvailable
+                                ? colorScheme.onSurface
+                                : colorScheme.onSurfaceVariant),
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -2591,19 +2722,19 @@ class _MenuItemCard extends StatelessWidget {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: Colors.grey[300]!,
+                            color: colorScheme.outline.withValues(alpha: 0.4),
                             width: 1,
                           ),
                         ),
                         child: Text(
                           'Qty: ${item.quantity}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                       ),
@@ -2640,13 +2771,15 @@ class _MenuItemCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(9),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.edit_outlined,
                           size: 18,
-                          color: Colors.grey[700],
+                          color: isDark
+                              ? Colors.white70
+                              : colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -2695,7 +2828,7 @@ class _RestaurantSummary {
   final String imageUrl;
 }
 
-enum _LiveOrderStatus { newOrder, preparing, ready, pickedUp }
+enum _LiveOrderStatus { newOrder, preparing, ready, pickedUp, cancelled }
 
 class _LiveOrder {
   _LiveOrder({
@@ -2705,6 +2838,7 @@ class _LiveOrder {
     required this.customerName,
     required this.customerPhone,
     required this.deliveryAddress,
+    required this.notes,
     required this.placedAt,
     required this.lines,
   });
@@ -2715,6 +2849,7 @@ class _LiveOrder {
   final String customerName;
   final String customerPhone;
   final String deliveryAddress;
+  final String notes;
   final DateTime placedAt;
   final List<_OrderLine> lines;
 
@@ -2777,120 +2912,335 @@ void _handleMenuSelection(
   }
 }
 
-void _showNotifications(BuildContext context, String restaurantId) {
-  showDialog(
+Future<void> _showNotifications(
+  BuildContext context,
+  String restaurantId,
+) async {
+  if (restaurantId.isEmpty) {
+    return;
+  }
+
+  String formatTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) {
+      return 'Just now';
+    }
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}m ago';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    }
+    return '${diff.inDays}d ago';
+  }
+
+  Color statusColor(String status) {
+    switch (status) {
+      case 'ready':
+        return const Color(0xFF2E7D32);
+      case 'preparing':
+        return const Color(0xFFEF6C00);
+      case 'pickedUp':
+        return const Color(0xFF1565C0);
+      case 'cancelled':
+        return const Color(0xFFC62828);
+      default:
+        return const Color(0xFF455A64);
+    }
+  }
+
+  IconData statusIcon(String status) {
+    switch (status) {
+      case 'ready':
+        return Icons.notifications_active;
+      case 'preparing':
+        return Icons.soup_kitchen_outlined;
+      case 'pickedUp':
+        return Icons.check_circle_outline;
+      case 'cancelled':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.shopping_bag_outlined;
+    }
+  }
+
+  String statusTitle(String status) {
+    switch (status) {
+      case 'ready':
+        return 'Order Ready';
+      case 'preparing':
+        return 'Preparing Order';
+      case 'pickedUp':
+        return 'Order Picked Up';
+      case 'cancelled':
+        return 'Order Cancelled';
+      default:
+        return 'New Order';
+    }
+  }
+
+  final snapshot = await FirebaseFirestore.instance
+      .collection('orders')
+      .where('restaurantId', isEqualTo: restaurantId)
+      .limit(150)
+      .get();
+
+  final docs = snapshot.docs.toList();
+  docs.sort((a, b) {
+    final aTs = a.data()['createdAt'];
+    final bTs = b.data()['createdAt'];
+    final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(1970);
+    final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(1970);
+    return bDate.compareTo(aDate);
+  });
+
+  final unseenNewDocs = docs.where((doc) {
+    final data = doc.data();
+    return data['status'] == 'new' && data['ownerNotificationSeen'] != true;
+  }).toList();
+
+  final allUpdateDocs = docs.where((doc) {
+    final status = (doc.data()['status'] ?? '').toString();
+    return status.isNotEmpty;
+  }).toList();
+
+  if (!context.mounted) {
+    return;
+  }
+
+  await showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.notifications, color: Color(0xFF2E7D32)),
-          SizedBox(width: 8),
-          Text('Notifications'),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('orders')
-              .where('restaurantId', isEqualTo: restaurantId)
-              .where('status', isEqualTo: 'new')
-              .orderBy('createdAt', descending: true)
-              .limit(10)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+    builder: (context) {
+      Widget buildOrderCard(DocumentSnapshot<Map<String, dynamic>> doc) {
+        final data = doc.data() ?? {};
+        final status = (data['status'] ?? 'new').toString();
+        final foodName = (data['foodName'] ?? 'Item').toString();
+        final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+        final price = (data['price'] as num?)?.toDouble() ?? 0;
+        final total = price * quantity;
+        final createdAt = data['createdAt'] as Timestamp?;
+        final time = createdAt?.toDate() ?? DateTime.now();
+        final color = statusColor(status);
+        final displayId = doc.id.length > 8
+            ? doc.id.substring(0, 8).toUpperCase()
+            : doc.id.toUpperCase();
+
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 8,
+            ),
+            leading: CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.12),
+              child: Icon(statusIcon(status), color: color),
+            ),
+            title: Text(
+              '${statusTitle(status)} #$displayId',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text('Error: ${snapshot.error}'),
-                ),
-              );
-            }
-
-            final docs = snapshot.data?.docs ?? [];
-
-            if (docs.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.notifications_none,
-                        size: 48,
-                        color: Colors.grey[300],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No new orders',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        status.toUpperCase(),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      formatTimeAgo(time),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      Widget buildEmpty(String text) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.notifications_none,
+                  size: 52,
+                  color: Colors.grey[350],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SizedBox(
+          width: double.infinity,
+          height: 600,
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF2E7D32), Color(0xFF43A047)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Color(0x22FFFFFF),
+                        child: Icon(
+                          Icons.notifications_active,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Order Notifications',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              );
-            }
-
-            return ListView.builder(
-              shrinkWrap: true,
-              itemCount: docs.length,
-              itemBuilder: (context, index) {
-                final doc = docs[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final foodName = data['foodName'] ?? 'Item';
-                final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
-                final price = (data['price'] as num?)?.toDouble() ?? 0;
-                final total = price * quantity;
-                final createdAt = data['createdAt'] as Timestamp?;
-                final orderId = doc.id;
-
-                String timeAgo = 'Just now';
-                if (createdAt != null) {
-                  final orderTime = createdAt.toDate();
-                  final diff = DateTime.now().difference(orderTime);
-                  if (diff.inMinutes < 1) {
-                    timeAgo = 'Just now';
-                  } else if (diff.inMinutes < 60) {
-                    timeAgo = '${diff.inMinutes} min ago';
-                  } else if (diff.inHours < 24) {
-                    timeAgo = '${diff.inHours}h ago';
-                  } else {
-                    timeAgo = '${diff.inDays}d ago';
-                  }
-                }
-
-                return _NotificationTile(
-                  icon: Icons.shopping_bag,
-                  title: 'New Order #${orderId.substring(0, 8).toUpperCase()}',
-                  subtitle:
-                      '$foodName • $quantity item${quantity > 1 ? 's' : ''} • ₹${total.toStringAsFixed(0)}',
-                  time: timeAgo,
-                  color: const Color(0xFF2E7D32),
-                );
-              },
-            );
-          },
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 2),
+                  child: Text(
+                    'Last updated: ${formatTimeAgo(DateTime.now())}',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0x22333333)),
+                  ),
+                  child: const TabBar(
+                    dividerColor: Colors.transparent,
+                    labelColor: Color(0xFF2E7D32),
+                    unselectedLabelColor: Colors.black54,
+                    indicatorColor: Color(0xFF2E7D32),
+                    tabs: [
+                      Tab(text: 'New Orders'),
+                      Tab(text: 'All Updates'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      unseenNewDocs.isEmpty
+                          ? buildEmpty('No new orders right now.')
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                              itemCount: unseenNewDocs.length,
+                              itemBuilder: (_, i) =>
+                                  buildOrderCard(unseenNewDocs[i]),
+                            ),
+                      allUpdateDocs.isEmpty
+                          ? buildEmpty('No order updates yet.')
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                              itemCount: allUpdateDocs.length,
+                              itemBuilder: (_, i) =>
+                                  buildOrderCard(allUpdateDocs[i]),
+                            ),
+                    ],
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
+      );
+    },
   );
+
+  if (unseenNewDocs.isEmpty) {
+    return;
+  }
+
+  final batch = FirebaseFirestore.instance.batch();
+  for (final doc in unseenNewDocs) {
+    batch.update(doc.reference, {'ownerNotificationSeen': true});
+  }
+  await batch.commit();
 }
 
 void _showRestaurantDetails(
@@ -2944,6 +3294,7 @@ void _handleLogout(BuildContext context) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Logged out successfully'),
+                  duration: Duration(seconds: 3),
                   backgroundColor: Color(0xFF2E7D32),
                 ),
               );
@@ -2958,6 +3309,7 @@ void _handleLogout(BuildContext context) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Error logging out: $e'),
+                  duration: const Duration(seconds: 3),
                   backgroundColor: Colors.red,
                 ),
               );
@@ -2969,44 +3321,6 @@ void _handleLogout(BuildContext context) {
       ],
     ),
   );
-}
-
-// UI Helper Widgets
-class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.time,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String time;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.1),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Text(subtitle),
-          const SizedBox(height: 4),
-          Text(time, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        ],
-      ),
-      isThreeLine: true,
-    );
-  }
 }
 
 // Restaurant Details Dialog
@@ -3440,6 +3754,8 @@ class _SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<_SettingsDialog> {
+  final AuthService _authService = AuthService();
+  final RestaurantService _restaurantService = RestaurantService();
   bool _notificationsEnabled = true;
   late bool _darkModeEnabled;
 
@@ -3513,8 +3829,112 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     );
   }
 
+  Future<void> _confirmDeleteOwnerAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete Owner Account?'),
+            ],
+          ),
+          content: const Text(
+            'This will permanently delete your owner profile and all restaurants under your account. This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Delete Account'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteOwnerAccount();
+    }
+  }
+
+  Future<void> _deleteOwnerAccount() async {
+    if (_isDeletingAccount) {
+      return;
+    }
+
+    setState(() {
+      _isDeletingAccount = true;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('No signed-in owner found.');
+      }
+
+      final ownerRestaurants = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .where('ownerId', isEqualTo: user.uid)
+          .get();
+
+      for (final restaurantDoc in ownerRestaurants.docs) {
+        await _restaurantService.deleteRestaurant(restaurantDoc.id);
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .delete();
+
+      try {
+        await user.delete();
+      } on FirebaseAuthException catch (error) {
+        // If recent login is required, still force sign out and redirect.
+        if (error.code != 'requires-recent-login') {
+          rethrow;
+        }
+      }
+
+      await _authService.logout();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).pushNamedAndRemoveUntil('/entry', (route) => false);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete owner account: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingAccount = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+
     return AlertDialog(
       title: const Row(
         children: [
@@ -3534,11 +3954,44 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             title: const Text('Notifications'),
             subtitle: const Text('Receive order and review alerts'),
             value: _notificationsEnabled,
-            onChanged: (value) {
+            onChanged: (value) async {
+              final previous = _notificationsEnabled;
               setState(() {
                 _notificationsEnabled = value;
               });
-              ScaffoldMessenger.of(context).showSnackBar(
+
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null) {
+                try {
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .set({
+                        'notificationsEnabled': value,
+                      }, SetOptions(merge: true));
+                } catch (error) {
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _notificationsEnabled = previous;
+                  });
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Failed to update notification setting: $error',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+              }
+
+              if (!mounted) {
+                return;
+              }
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(
                     value ? 'Notifications enabled' : 'Notifications disabled',
@@ -3577,11 +4030,29 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showHelpSupport(context),
           ),
+          const Divider(height: 18),
+          ListTile(
+            leading: _isDeletingAccount
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text(
+              'Delete Owner Account',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+            ),
+            subtitle: const Text(
+              'Deletes your account and all your restaurants',
+            ),
+            onTap: _isDeletingAccount ? null : _confirmDeleteOwnerAccount,
+          ),
         ],
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isDeletingAccount ? null : () => Navigator.pop(context),
           child: const Text('Close'),
         ),
       ],

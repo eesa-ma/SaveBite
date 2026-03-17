@@ -2,6 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+class _OrderHistoryGroup {
+  const _OrderHistoryGroup({required this.key, required this.orders});
+
+  final String key;
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> orders;
+
+  Map<String, dynamic> get primaryData => orders.first.data();
+}
+
 class MyReservationsScreen extends StatefulWidget {
   const MyReservationsScreen({super.key});
 
@@ -124,12 +133,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
   }
 
   Widget _buildActiveOrders(String userId) {
-    final ordersStream = FirebaseFirestore.instance
-        .collection('orders')
-        .where('userId', isEqualTo: userId)
-        .where('status', whereIn: ['new', 'preparing', 'ready'])
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+    final ordersStream = _ordersStream(userId);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: ordersStream,
@@ -146,7 +150,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final allDocs = snapshot.data?.docs ?? [];
+        final docs = _sortOrders(allDocs.where((doc) {
+          final status = (doc.data()['status'] ?? 'new').toString();
+          return _isActiveStatus(status);
+        }));
 
         if (docs.isEmpty) {
           return Center(
@@ -183,12 +191,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
   }
 
   Widget _buildOrderHistory(String userId) {
-    final ordersStream = FirebaseFirestore.instance
-        .collection('orders')
-        .where('userId', isEqualTo: userId)
-        .where('status', whereIn: ['ready', 'pickedUp', 'cancelled'])
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+    final ordersStream = _ordersStream(userId);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: ordersStream,
@@ -205,7 +208,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final allDocs = snapshot.data?.docs ?? [];
+        final docs = _sortOrders(allDocs.where((doc) {
+          final status = (doc.data()['status'] ?? 'new').toString();
+          return _isHistoryStatus(status);
+        }));
 
         if (docs.isEmpty) {
           return Center(
@@ -223,21 +230,218 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           );
         }
 
+        final groups = _groupHistoryOrders(docs);
+
         return ListView.builder(
           padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
+          itemCount: groups.length,
           itemBuilder: (context, index) {
-            final order = docs[index];
-            final data = order.data();
-            return _buildOrderCard(
-              data,
-              context,
-              isHistory: true,
-              orderId: order.id,
-            );
+            return _buildHistoryCard(groups[index], context);
           },
         );
       },
+    );
+  }
+
+  Widget _buildHistoryCard(_OrderHistoryGroup group, BuildContext context) {
+    final data = group.primaryData;
+    final restaurantName = (data['restaurantName'] ?? 'Restaurant').toString();
+    final status = (data['status'] ?? 'pickedUp').toString();
+    final timestamp = _createdAtFromData(data);
+    final total = _groupBillTotal(group);
+
+    final statusText = status == 'cancelled' ? 'Cancelled' : 'Completed';
+    final statusColor = status == 'cancelled' ? Colors.red : Colors.green;
+    final visibleItems = group.orders.take(2).toList();
+    final hiddenCount = group.orders.length - visibleItems.length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FutureBuilder<String?>(
+                  future: _resolveOrderCardImage(data),
+                  builder: (context, snapshot) {
+                    final imageUrl = snapshot.data;
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        color: MyReservationsScreen._lightGrey,
+                        child: imageUrl != null && imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(Icons.storefront, color: Colors.grey);
+                                },
+                              )
+                            : const Icon(Icons.storefront, color: Colors.grey),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FutureBuilder<Map<String, String>>(
+                    future: _resolveRestaurantDetails(data),
+                    builder: (context, snapshot) {
+                      final restaurant = snapshot.data ??
+                          {
+                            'name': restaurantName,
+                            'address':
+                                (data['restaurantAddress'] ?? '').toString(),
+                            'status': 'Loading...',
+                          };
+
+                      final subtitle = (restaurant['status'] ==
+                                  'Closed permanently' ||
+                              (restaurant['address'] ?? '').trim().isEmpty)
+                          ? (restaurant['status'] ?? '')
+                          : (restaurant['address'] ?? '');
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            restaurant['name'] ?? restaurantName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style:
+                                TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.check_circle, size: 18, color: statusColor),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ...visibleItems.map((order) {
+              final item = order.data();
+              final quantity = (item['quantity'] is num)
+                  ? (item['quantity'] as num).toInt()
+                  : 1;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: MyReservationsScreen._lightGrey,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${quantity}x',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        (item['foodName'] ?? 'Item').toString(),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            if (hiddenCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  '& $hiddenCount more',
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            Divider(color: Colors.grey[300], height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => _showHistoryGroupDetails(context, group),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFE36B2C),
+                  side: const BorderSide(color: Color(0xFFFFE4D6)),
+                  backgroundColor: const Color(0xFFFFF2EB),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'DETAILS',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Ordered: ${_formatOrderDate(timestamp)} • Bill Total: ₹${total.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -394,7 +598,52 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                               color: Colors.grey[600],
                             ),
                           ),
-                        ],
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FutureBuilder<String>(
+                        future: _resolveRestaurantName(data),
+                        builder: (context, snapshot) {
+                          final restaurantName = snapshot.data ??
+                              (data['restaurantName'] ?? 'Restaurant')
+                                  .toString();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                restaurantName,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                foodName,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$quantity item${quantity > 1 ? 's' : ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -724,6 +973,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
             .doc(restaurantId);
         await FirebaseFirestore.instance.runTransaction((txn) async {
           final snap = await txn.get(restaurantRef);
+          if (!snap.exists) {
+            return;
+          }
           final d = snap.data() ?? {};
           final oldCount =
               (d['reviewCount'] as num?)?.toInt() ??
@@ -759,37 +1011,57 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
         ),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Order Details',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              _buildDetailRow('Item', order['foodName'] ?? '-'),
-              _buildDetailRow('Quantity', '${order['quantity']} x'),
-              _buildDetailRow('Price', '₹${order['price']}'),
-              _buildDetailRow('Status', order['status'] ?? '-'),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: MyReservationsScreen._primaryColor,
+        return FutureBuilder<Map<String, String>>(
+          future: _resolveRestaurantDetails(order),
+          builder: (context, snapshot) {
+            final restaurant = snapshot.data ??
+                {
+                  'name':
+                      (order['restaurantName'] ?? 'Restaurant').toString(),
+                  'address': (order['restaurantAddress'] ?? '').toString(),
+                  'status': 'Loading...',
+                };
+
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Order Details',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  child: const Text(
-                    'Close',
-                    style: TextStyle(color: Colors.white),
+                  const SizedBox(height: 16),
+                  _buildDetailRow('Restaurant', restaurant['name'] ?? '-'),
+                  _buildDetailRow(
+                    'Restaurant Status',
+                    restaurant['status'] ?? '-',
                   ),
-                ),
+                  if ((restaurant['address'] ?? '').trim().isNotEmpty)
+                    _buildDetailRow('Address', restaurant['address'] ?? '-'),
+                  _buildDetailRow('Item', order['foodName'] ?? '-'),
+                  _buildDetailRow('Quantity', '${order['quantity']} x'),
+                  _buildDetailRow('Price', '₹${order['price']}'),
+                  _buildDetailRow('Status', order['status'] ?? '-'),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: MyReservationsScreen._primaryColor,
+                      ),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -900,7 +1172,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
               Text('Cancelling order...'),
             ],
           ),
-          duration: Duration(seconds: 30),
+          duration: Duration(seconds: 3),
         ),
       );
 
@@ -1013,7 +1285,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
               ],
             ),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -1037,7 +1309,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
               ],
             ),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
