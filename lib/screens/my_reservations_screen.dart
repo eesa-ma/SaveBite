@@ -831,8 +831,8 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
 
     for (final doc in docs) {
       final data = doc.data();
-      final orderGroupId =
-          (data['orderGroupId'] ?? data['orderId'] ?? doc.id).toString();
+      final orderGroupId = (data['orderGroupId'] ?? data['orderId'] ?? doc.id)
+          .toString();
       final key = orderGroupId.isEmpty ? doc.id : orderGroupId;
       byKey.putIfAbsent(key, () => []).add(doc);
     }
@@ -1262,6 +1262,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
   void _showOrderDetails(BuildContext context, Map<String, dynamic> order) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
@@ -1280,43 +1281,53 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                   'status': 'Loading...',
                 };
 
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Order Details',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildDetailRow('Restaurant', restaurant['name'] ?? '-'),
-                  _buildDetailRow(
-                    'Restaurant Status',
-                    restaurant['status'] ?? '-',
-                  ),
-                  if ((restaurant['address'] ?? '').trim().isNotEmpty)
-                    _buildDetailRow('Address', restaurant['address'] ?? '-'),
-                  _buildDetailRow('Item', order['foodName'] ?? '-'),
-                  _buildDetailRow('Quantity', '${order['quantity']} x'),
-                  _buildDetailRow('Price', '₹${order['price']}'),
-                  _buildDetailRow('Status', order['status'] ?? '-'),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: MyReservationsScreen._primaryColor,
-                      ),
-                      child: const Text(
-                        'Close',
-                        style: TextStyle(color: Colors.white),
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  20 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Order Details',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    _buildDetailRow('Restaurant', restaurant['name'] ?? '-'),
+                    _buildDetailRow(
+                      'Restaurant Status',
+                      restaurant['status'] ?? '-',
+                    ),
+                    if ((restaurant['address'] ?? '').trim().isNotEmpty)
+                      _buildDetailRow('Address', restaurant['address'] ?? '-'),
+                    _buildDetailRow('Item', order['foodName'] ?? '-'),
+                    _buildDetailRow('Quantity', '${order['quantity']} x'),
+                    _buildDetailRow('Price', '₹${order['price']}'),
+                    _buildDetailRow('Status', order['status'] ?? '-'),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: MyReservationsScreen._primaryColor,
+                        ),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -1329,12 +1340,23 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              softWrap: true,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
           ),
         ],
       ),

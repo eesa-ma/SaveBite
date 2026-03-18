@@ -177,15 +177,34 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ),
                       ],
                       const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final priceText = Text(
                             '₹${widget.item.price.toStringAsFixed(2)} each',
                             style: TextStyle(color: Colors.grey[700]),
-                          ),
-                          _buildQuantityStepper(),
-                        ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          );
+
+                          if (constraints.maxWidth < 250) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                priceText,
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: _buildQuantityStepper(),
+                                ),
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [priceText, _buildQuantityStepper()],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -331,20 +350,33 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _buildQuantityStepper() {
     final maxQty = widget.item.quantityAvailable;
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
           onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
-          icon: const Icon(Icons.remove_circle_outline),
+          icon: const Icon(Icons.remove_circle_outline, size: 22),
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+          splashRadius: 18,
         ),
-        Text(
-          '$_quantity',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        SizedBox(
+          width: 24,
+          child: Text(
+            '$_quantity',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         ),
         IconButton(
           onPressed: _quantity < maxQty
               ? () => setState(() => _quantity++)
               : null,
-          icon: const Icon(Icons.add_circle_outline),
+          icon: const Icon(Icons.add_circle_outline, size: 22),
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+          splashRadius: 18,
         ),
       ],
     );
