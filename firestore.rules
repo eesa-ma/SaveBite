@@ -6,6 +6,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userDocPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+             && exists(userDocPath(request.auth.uid))
+             && get(userDocPath(request.auth.uid)).data.role == 'Admin';
+    }
+
     function isRestaurantOwner(restaurantId) {
       return isSignedIn()
              && restaurantId is string
@@ -25,54 +35,61 @@ service cloud.firestore {
     // Restaurants: anyone can read; only authenticated users can write
     match /restaurants/{restaurantId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isSignedIn() || isAdmin();
     }
 
     // Food items: anyone can read; only authenticated users can write
     match /foodItems/{itemId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isSignedIn() || isAdmin();
     }
 
     // Orders: authenticated users can create; owner of the order or any
     // authenticated user (restaurant owner) can read/update
     match /orders/{orderId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn()
+      allow read: if isSignedIn() || isAdmin();
+      allow create: if isSignedIn() || isAdmin();
+      allow update, delete: if (isSignedIn() || isAdmin())
                             && (
                               resource.data.userId == request.auth.uid
                               || isRestaurantOwner(resource.data.restaurantId)
+                              || isAdmin()
                             );
     }
 
     // Reviews: anyone can read; authenticated users can create their own
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if isSignedIn()
+      allow create: if (isSignedIn() || isAdmin())
                     && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isSignedIn()
+      allow update, delete: if (isSignedIn() || isAdmin())
                              && (
                                resource.data.userId == request.auth.uid
                                || isRestaurantOwner(resource.data.restaurantId)
                                || isOrderRestaurantOwnerByOrderId(resource.data.orderId)
+                               || isAdmin()
                              );
     }
 
     // User profiles
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update, delete: if isAdmin()
+                  || (request.auth != null && request.auth.uid == userId);
 
       // User favorites stored as subcollection documents such as
       // /users/{userId}/favorites/restaurants and /users/{userId}/favorites/items
       match /favorites/{favoriteDoc} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isAdmin()
+                           || (request.auth != null && request.auth.uid == userId);
       }
     }
 
     // Favorites
     match /favorites/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isAdmin()
+                         || (request.auth != null && request.auth.uid == userId);
     }
   }
 }
