@@ -1192,7 +1192,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             .map(_menuItemFromDoc)
             .toList();
 
-        if (menuItems.isEmpty) {
+        final shouldAutoClose =
+            !isLoading && snapshot.hasData && menuItems.isEmpty;
+
+        if (shouldAutoClose) {
           if (!_autoClosingRestaurantIds.contains(restaurantId)) {
             _autoClosingRestaurantIds.add(restaurantId);
             _restaurantService
