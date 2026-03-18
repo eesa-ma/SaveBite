@@ -489,40 +489,111 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   }
 
   Widget _buildFoodTypeFilter() {
-    final filters = ['All', 'Veg', 'Non-Veg'];
-    final theme = Theme.of(context);
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: filters.map((filter) {
-            final isSelected = _selectedFoodType == filter;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(filter),
-                selected: isSelected,
-                onSelected: (_) {
-                  setState(() {
-                    _selectedFoodType = filter;
-                  });
-                },
-                backgroundColor: theme.cardColor,
-                selectedColor: _primaryColor,
-                labelStyle: TextStyle(
-                  color: isSelected
-                      ? Colors.white
-                      : theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
+          children: [
+            _buildFoodTypePill(
+              isVeg: true,
+              isSelected: _selectedFoodType == 'Veg',
+              onTap: () {
+                setState(() {
+                  _selectedFoodType = _selectedFoodType == 'Veg'
+                      ? 'All'
+                      : 'Veg';
+                });
+              },
+            ),
+            const SizedBox(width: 8),
+            _buildFoodTypePill(
+              isVeg: false,
+              isSelected: _selectedFoodType == 'Non-Veg',
+              onTap: () {
+                setState(() {
+                  _selectedFoodType = _selectedFoodType == 'Non-Veg'
+                      ? 'All'
+                      : 'Non-Veg';
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFoodTypePill({
+    required bool isVeg,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final accentColor = isVeg
+        ? const Color(0xFF1B9E77)
+        : const Color(0xFFD1495B);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        width: 96,
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected ? accentColor : const Color(0xFFD8D8D8),
+            width: 1.6,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: accentColor, width: 1.8),
+                color: isSelected
+                    ? accentColor.withValues(alpha: 0.12)
+                    : Colors.transparent,
+              ),
+              child: Icon(
+                isVeg ? Icons.circle : Icons.change_history,
+                size: 13,
+                color: accentColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Container(
+                height: 12,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE7E8EB),
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                side: BorderSide(
-                  color: isSelected ? _primaryColor : _lightGrey,
+                child: Align(
+                  alignment: isSelected
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    width: 16,
+                    margin: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? accentColor.withValues(alpha: 0.55)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
                 ),
               ),
-            );
-          }).toList(),
+            ),
+          ],
         ),
       ),
     );
