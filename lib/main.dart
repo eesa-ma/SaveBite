@@ -13,7 +13,7 @@ import 'package:save_bite/screens/profile_sync_screen.dart';
 import 'package:save_bite/screens/my_reservations_screen.dart';
 import 'package:save_bite/screens/favorites_screen.dart';
 import 'package:save_bite/screens/notifications_screen.dart';
-import 'package:save_bite/screens/admin_dashboard_screen.dart';
+//import 'package:save_bite/screens/admin_dashboard_screen.dart';
 import 'package:save_bite/utils/theme_manager.dart';
 
 void main() async {

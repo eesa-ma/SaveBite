@@ -37,7 +37,7 @@ class RestaurantService {
       'latitude': latitude,
       'longitude': longitude,
       'imageUrl': imageUrl,
-      'status': 'pending',
+      //'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
