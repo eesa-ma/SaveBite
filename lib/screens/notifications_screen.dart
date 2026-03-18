@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:save_bite/screens/restaurant_details_screen.dart';
 import 'package:save_bite/services/notification_center_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -320,6 +321,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _StockAlert(
           itemId: doc.id,
           itemName: itemName.isEmpty ? 'Food item' : itemName,
+          restaurantId: restaurantId,
           restaurantName: restaurantNameById[restaurantId] ?? 'Restaurant',
           imageUrl: imageUrl,
           quantityAvailable: quantity,
@@ -698,6 +700,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        onTap: () => _openRestaurantFromStockAlert(alert),
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Container(
@@ -742,6 +745,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               fontSize: 10,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRestaurantFromStockAlert(_StockAlert alert) async {
+    if (alert.restaurantId.isEmpty || !mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RestaurantDetailsScreen(
+          restaurantId: alert.restaurantId,
+          restaurantName: alert.restaurantName,
         ),
       ),
     );
@@ -1025,6 +1043,7 @@ class _StockAlert {
   const _StockAlert({
     required this.itemId,
     required this.itemName,
+    required this.restaurantId,
     required this.restaurantName,
     required this.imageUrl,
     required this.quantityAvailable,
@@ -1032,6 +1051,7 @@ class _StockAlert {
 
   final String itemId;
   final String itemName;
+  final String restaurantId;
   final String restaurantName;
   final String imageUrl;
   final int quantityAvailable;

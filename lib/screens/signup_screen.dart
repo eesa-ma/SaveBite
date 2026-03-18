@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:save_bite/services/auth_serivce.dart';
 
+
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -117,12 +118,12 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   String _routeForRole(String role) {
-    switch (role) {
-      case 'Restaurant':
+    switch (role.toLowerCase()) {
+      case 'restaurant':
         return '/restaurant';
-      case 'Admin':
+      case 'admin':
         return '/admin';
-      case 'User':
+      case 'user':
       default:
         return '/entry';
     }

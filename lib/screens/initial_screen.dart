@@ -71,16 +71,16 @@ class _InitialScreenState extends State<InitialScreen> {
     }
 
     // Route based on role
-    final role = userData['role'];
+    final role = (userData['role'] ?? '').toString().toLowerCase();
     String route;
     switch (role) {
-      case 'Admin':
-        route = '/admin';
-        break;
-      case 'Restaurant':
+      case 'restaurant':
         route = '/restaurant';
         break;
-      case 'User':
+      case 'admin':
+        route = '/admin';
+        break;
+      case 'user':
       default:
         route = '/entry';
         break;

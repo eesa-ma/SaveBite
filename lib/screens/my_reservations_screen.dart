@@ -9,6 +9,7 @@ class _OrderHistoryGroup {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> orders;
 
   Map<String, dynamic> get primaryData => orders.first.data();
+  String get primaryOrderId => orders.first.id;
 }
 
 class MyReservationsScreen extends StatefulWidget {
@@ -62,7 +63,7 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           backgroundColor: MyReservationsScreen._primaryColor,
           foregroundColor: Colors.white,
         ),
-        body: const Center(child: Text('Please sign in to view orders.')),
+        body: const Center(child: Text('Please log in to view orders.')),
       );
     }
 
@@ -249,8 +250,11 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
 
   Widget _buildHistoryCard(_OrderHistoryGroup group, BuildContext context) {
     final data = group.primaryData;
+    final primaryOrderId = group.primaryOrderId;
     final restaurantName = (data['restaurantName'] ?? 'Restaurant').toString();
     final status = (data['status'] ?? 'pickedUp').toString();
+    final hasReview = data['reviewed'] == true;
+    final savedRating = (data['rating'] as num?)?.toDouble() ?? 0.0;
     final timestamp = _createdAtFromData(data);
     final total = _groupBillTotal(group);
 
@@ -446,6 +450,36 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                 ),
               ),
             ),
+            if (status == 'pickedUp') ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: hasReview
+                    ? OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.star, size: 16),
+                        label: Text(
+                          savedRating > 0
+                              ? 'Reviewed • ${savedRating.toStringAsFixed(1)}'
+                              : 'Reviewed',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.amber[700],
+                          side: BorderSide(color: Colors.amber[300]!),
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: () =>
+                            _showReviewDialog(context, primaryOrderId, data),
+                        icon: const Icon(Icons.star_border, size: 16),
+                        label: const Text('Write a Review'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: MyReservationsScreen._primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+              ),
+            ],
             const SizedBox(height: 10),
             Text(
               'Ordered: ${_formatOrderDate(timestamp)} • Bill Total: ₹${total.toStringAsFixed(0)}',
@@ -797,12 +831,9 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
 
     for (final doc in docs) {
       final data = doc.data();
-      final date = _createdAtFromData(data);
-      final status = (data['status'] ?? '').toString();
-      final restaurantId =
-          (data['restaurantId'] ?? data['restaurantName'] ?? '').toString();
-      final key =
-          '${date.year}-${date.month}-${date.day}-$status-$restaurantId';
+      final orderGroupId =
+          (data['orderGroupId'] ?? data['orderId'] ?? doc.id).toString();
+      final key = orderGroupId.isEmpty ? doc.id : orderGroupId;
       byKey.putIfAbsent(key, () => []).add(doc);
     }
 

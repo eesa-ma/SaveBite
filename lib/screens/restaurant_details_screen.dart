@@ -48,6 +48,16 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
   static const Color _lightGrey = Color(0xFFF5F5F5);
   static const Color _mediumGrey = Color(0xFFBDBDBD);
 
+  double? _asDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value);
+    }
+    return null;
+  }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();
@@ -120,9 +130,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     try {
       final locationService = LocationService();
       final userLocation = await locationService.getCurrentLocation();
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _userLatitude = userLocation['latitude'];
-        _userLongitude = userLocation['longitude'];
+        _userLatitude = _asDouble(userLocation['latitude']);
+        _userLongitude = _asDouble(userLocation['longitude']);
       });
     } catch (e) {
       // Silently fail - will just not show distance
@@ -137,9 +150,12 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
       if (restaurantDoc.exists) {
         final data = restaurantDoc.data();
+        if (!mounted) {
+          return;
+        }
         setState(() {
-          _restaurantLatitude = data?['latitude'];
-          _restaurantLongitude = data?['longitude'];
+          _restaurantLatitude = _asDouble(data?['latitude']);
+          _restaurantLongitude = _asDouble(data?['longitude']);
           _restaurantAddress = data?['address'];
           _restaurantImageUrl = data?['imageUrl'];
           _restaurantIsOpen = data?['isOpen'] == true;

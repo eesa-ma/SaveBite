@@ -189,11 +189,45 @@ class _EntryScreenState extends State<EntryScreen> {
 
   Future<List<Restaurant>> _fetchRestaurants() async {
     try {
-      final snapshot = await _firestore
-          .collection('restaurants')
-          .where('status', isEqualTo: 'approved')
-          .get();
-      return snapshot.docs.map((doc) => Restaurant.fromFirestore(doc)).toList();
+      final restaurantSnapshot = await _firestore.collection('restaurants').get();
+      final foodSnapshot = await _firestore.collection('foodItems').get();
+
+      final restaurantIdsWithMenu = foodSnapshot.docs
+          .map((doc) => (doc.data()['restaurantId'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final openButEmpty = restaurantSnapshot.docs.where((doc) {
+        final data = doc.data();
+        final isOpen = data['isOpen'] == true;
+        return isOpen && !restaurantIdsWithMenu.contains(doc.id);
+      }).toList();
+
+      if (openButEmpty.isNotEmpty) {
+        try {
+          final batch = _firestore.batch();
+          for (final doc in openButEmpty) {
+            batch.update(doc.reference, {'isOpen': false});
+          }
+          await batch.commit();
+        } catch (_) {
+          // Best-effort auto-close only.
+        }
+      }
+
+      final visibleRestaurants = restaurantSnapshot.docs.where((doc) {
+        final data = doc.data();
+        final isOpen = data['isOpen'] == true;
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        return
+            isOpen &&
+            status == 'approved' &&
+            restaurantIdsWithMenu.contains(doc.id);
+      });
+
+      return visibleRestaurants
+          .map((doc) => Restaurant.fromFirestore(doc))
+          .toList();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

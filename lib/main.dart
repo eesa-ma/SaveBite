@@ -5,6 +5,7 @@ import 'package:save_bite/screens/home_screen.dart'; // Import the HomeScreen
 import 'package:save_bite/screens/entry_screen.dart'; // Import the EntryScreen
 import 'package:save_bite/screens/initial_screen.dart'; // Import the InitialScreen
 import 'package:save_bite/screens/owner_dashboard.dart';
+import 'package:save_bite/screens/admin_dashboard.dart';
 import 'package:save_bite/screens/signup_screen.dart';
 import 'package:save_bite/screens/reset_password_screen.dart';
 import 'package:save_bite/screens/profile_screen.dart';

@@ -13,6 +13,7 @@ class FavoritesScreen extends StatefulWidget {
 class _FavoritesScreenState extends State<FavoritesScreen>
     with SingleTickerProviderStateMixin {
   final FavoritesService _favoritesService = FavoritesService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   late final TabController _tabController;
 
   bool _isLoading = true;
@@ -42,10 +43,23 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     try {
       final restaurants = await _favoritesService.getFavoriteRestaurants();
       final items = await _favoritesService.getFavoriteFoodItems();
+      final visibleRestaurantIds = await _getVisibleRestaurantIds();
+
+      final filteredRestaurants = restaurants.where((restaurant) {
+        final id = (restaurant['id'] ?? '').toString();
+        return id.isNotEmpty && visibleRestaurantIds.contains(id);
+      }).toList();
+
+      final filteredItems = items.where((item) {
+        final restaurantId = (item['restaurantId'] ?? '').toString();
+        return restaurantId.isNotEmpty &&
+            visibleRestaurantIds.contains(restaurantId);
+      }).toList();
+
       if (!mounted) return;
       setState(() {
-        _favoriteRestaurants = restaurants;
-        _favoriteItems = items;
+        _favoriteRestaurants = filteredRestaurants;
+        _favoriteItems = filteredItems;
         _isLoading = false;
       });
     } catch (e) {
@@ -55,6 +69,27 @@ class _FavoritesScreenState extends State<FavoritesScreen>
         _isLoading = false;
       });
     }
+  }
+
+  Future<Set<String>> _getVisibleRestaurantIds() async {
+    final restaurantsSnapshot = await _firestore
+        .collection('restaurants')
+        .where('status', isEqualTo: 'approved')
+        .where('isOpen', isEqualTo: true)
+        .get();
+
+    final openRestaurantIds = restaurantsSnapshot.docs.map((doc) => doc.id).toSet();
+    if (openRestaurantIds.isEmpty) {
+      return <String>{};
+    }
+
+    final foodSnapshot = await _firestore.collection('foodItems').get();
+    final menuRestaurantIds = foodSnapshot.docs
+        .map((doc) => (doc.data()['restaurantId'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    return openRestaurantIds.where(menuRestaurantIds.contains).toSet();
   }
 
   Future<void> _removeRestaurantFavorite(String restaurantId) async {
@@ -122,28 +157,30 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           .collection('restaurants')
           .doc(restaurantId)
           .get();
-      if (doc.exists) {
-        final data = doc.data();
-        final status = (data?['status'] ?? 'pending').toString().toLowerCase();
-        if (status != 'approved') {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('This restaurant is not available right now.'),
-              ),
-            );
-          }
-          return;
-        }
-        restaurantName = (data?['name'] ?? fallbackName).toString();
-      } else {
+      if (!doc.exists) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Restaurant not found.')),
+            const SnackBar(content: Text('This restaurant is no longer available.')),
           );
         }
         return;
       }
+
+      final data = doc.data() ?? {};
+      final isOpen = data['isOpen'] == true;
+      final status = (data['status'] ?? '').toString().toLowerCase();
+      if (!isOpen || status != 'approved') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This restaurant is currently unavailable.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      restaurantName = (data['name'] ?? fallbackName).toString();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

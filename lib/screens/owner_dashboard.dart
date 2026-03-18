@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:save_bite/services/cloudinary_service.dart';
 import '../services/auth_serivce.dart';
+import '../services/cloudinary_service.dart';
 import '../services/restaurant_service.dart';
 import '../utils/theme_manager.dart';
 import 'map_picker_screen.dart';
@@ -22,6 +22,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   final CloudinaryService _cloudinaryService = CloudinaryService();
   String _selectedRestaurantId = '';
   _RestaurantSummary? _selectedRestaurantCache;
+  final Set<String> _autoClosingRestaurantIds = <String>{};
 
   // Cache snapshots to prevent flicker on rebuild
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _ordersSnapshotCache =
@@ -1150,6 +1151,19 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             .map(_menuItemFromDoc)
             .toList();
 
+        if (menuItems.isEmpty) {
+          if (!_autoClosingRestaurantIds.contains(restaurantId)) {
+            _autoClosingRestaurantIds.add(restaurantId);
+            _restaurantService
+                .updateRestaurantStatus(restaurantId, false)
+                .catchError((_) {
+                  _autoClosingRestaurantIds.remove(restaurantId);
+                });
+          }
+        } else {
+          _autoClosingRestaurantIds.remove(restaurantId);
+        }
+
         return _FoodMenuManager(
           menuItems: menuItems,
           isLoading: isLoading,
@@ -1208,18 +1222,31 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
         .snapshots()
         .map((snapshot) {
           double totalRevenue = 0;
+          double dailyRevenue = 0;
           int totalOrders = 0;
+          final now = DateTime.now();
 
           for (final doc in snapshot.docs) {
             if (doc['status'] == 'pickedUp') {
               final price = (doc['price'] as num?)?.toDouble() ?? 0;
               final quantity = (doc['quantity'] as num?)?.toInt() ?? 1;
-              totalRevenue += price * quantity;
+              final orderRevenue = price * quantity;
+              totalRevenue += orderRevenue;
               totalOrders++;
+
+              final createdAt = doc.data()['createdAt'];
+              if (createdAt is Timestamp &&
+                  DateUtils.isSameDay(createdAt.toDate(), now)) {
+                dailyRevenue += orderRevenue;
+              }
             }
           }
 
-          return {'revenue': totalRevenue, 'orders': totalOrders};
+          return {
+            'revenue': totalRevenue,
+            'dailyRevenue': dailyRevenue,
+            'orders': totalOrders,
+          };
         });
   }
 
@@ -1402,6 +1429,8 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
               }
 
               final revenue = snapshot.data?['revenue'] as double? ?? 0;
+              final dailyRevenue =
+                  snapshot.data?['dailyRevenue'] as double? ?? 0;
               final orders = snapshot.data?['orders'] as int? ?? 0;
 
               return Row(
@@ -1409,7 +1438,7 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
-                        _showOrderHistory(context);
+                        _showOrderHistory(context, showDailyRevenue: true);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -1437,6 +1466,15 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Today: ₹${dailyRevenue.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -1492,11 +1530,16 @@ class _RestaurantHeaderState extends State<_RestaurantHeader> {
     );
   }
 
-  void _showOrderHistory(BuildContext context) {
+  void _showOrderHistory(
+    BuildContext context, {
+    bool showDailyRevenue = false,
+  }) {
     showModalBottomSheet(
       context: context,
-      builder: (context) =>
-          _OrderHistorySheet(restaurantId: widget.restaurantId),
+      builder: (context) => _OrderHistorySheet(
+        restaurantId: widget.restaurantId,
+        showDailyRevenue: showDailyRevenue,
+      ),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -4104,9 +4147,13 @@ class _SettingsDialogState extends State<_SettingsDialog> {
 
 // Order History Sheet
 class _OrderHistorySheet extends StatefulWidget {
-  const _OrderHistorySheet({required this.restaurantId});
+  const _OrderHistorySheet({
+    required this.restaurantId,
+    this.showDailyRevenue = false,
+  });
 
   final String restaurantId;
+  final bool showDailyRevenue;
 
   @override
   State<_OrderHistorySheet> createState() => _OrderHistorySheetState();
@@ -4114,6 +4161,7 @@ class _OrderHistorySheet extends StatefulWidget {
 
 class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   String _filterType = 'completed'; // completed, cancelled, all
+  String _revenueRange = 'month'; // month, 30d, all
 
   @override
   Widget build(BuildContext context) {
@@ -4146,8 +4194,10 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'Order History',
+                        Text(
+                          widget.showDailyRevenue
+                              ? 'Revenue by Day'
+                              : 'Order History',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -4161,20 +4211,22 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    // Filter tabs
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildFilterTab('Completed', 'completed'),
-                          const SizedBox(width: 8),
-                          _buildFilterTab('Cancelled', 'cancelled'),
-                          const SizedBox(width: 8),
-                          _buildFilterTab('All', 'all'),
-                        ],
+                    if (!widget.showDailyRevenue) ...[
+                      const SizedBox(height: 12),
+                      // Filter tabs
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterTab('Completed', 'completed'),
+                            const SizedBox(width: 8),
+                            _buildFilterTab('Cancelled', 'cancelled'),
+                            const SizedBox(width: 8),
+                            _buildFilterTab('All', 'all'),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -4209,7 +4261,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No orders found',
+                              widget.showDailyRevenue
+                                  ? 'No revenue data found'
+                                  : 'No orders found',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey[500],
@@ -4217,6 +4271,284 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                             ),
                           ],
                         ),
+                      );
+                    }
+
+                    if (widget.showDailyRevenue) {
+                      final entries = _buildDailyRevenueEntries(docs);
+                      final monthKeys = _extractMonthKeys(entries);
+                      final monthTotals = _buildMonthTotals(entries);
+                      final rangeTotalRevenue = entries.fold<double>(
+                        0,
+                        (total, entry) => total + entry.revenue,
+                      );
+                      final averagePerActiveDay = entries.isEmpty
+                          ? 0.0
+                          : (rangeTotalRevenue / entries.length);
+
+                      return ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(
+                              16,
+                              14,
+                              16,
+                              14,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(18),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF1B5E20,
+                                  ).withValues(alpha: 0.22),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _revenueRange == 'month'
+                                      ? 'This Month Revenue'
+                                      : _revenueRange == '30d'
+                                      ? 'Last 30 Days Revenue'
+                                      : 'All Time Revenue',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontSize: 12,
+                                    letterSpacing: 0.2,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '₹${rangeTotalRevenue.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.05,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    _RevenueMetricPill(
+                                      label: 'Active Days',
+                                      value: '${entries.length}',
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _RevenueMetricPill(
+                                      label: 'Avg / Day',
+                                      value:
+                                          '₹${averagePerActiveDay.toStringAsFixed(0)}',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _buildRevenueFilterTab('This Month', 'month'),
+                                const SizedBox(width: 8),
+                                _buildRevenueFilterTab('Last 30 Days', '30d'),
+                                const SizedBox(width: 8),
+                                _buildRevenueFilterTab('All', 'all'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          if (entries.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 26),
+                              child: Center(
+                                child: Text(
+                                  'No revenue data for this range',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            ...monthKeys.expand((monthKey) {
+                              final monthEntries = entries
+                                  .where(
+                                    (entry) =>
+                                        entry.date.year == monthKey.year &&
+                                        entry.date.month == monthKey.month,
+                                  )
+                                  .toList();
+
+                              final monthTotal = monthTotals[monthKey] ?? 0;
+
+                              return [
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 2,
+                                    right: 2,
+                                    bottom: 8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${_monthName(monthKey.month)} ${monthKey.year}',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey[700],
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${monthEntries.length} revenue days',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey[500],
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE8F5E9),
+                                          borderRadius: BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          '₹${monthTotal.toStringAsFixed(0)}',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF2E7D32),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ...monthEntries.map((entry) {
+                                  final dayTag =
+                                      '${entry.date.day}'.padLeft(2, '0');
+
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 11,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.045,
+                                          ),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                      border: Border.all(
+                                        color: const Color(0xFFE6E8EB),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 19,
+                                          backgroundColor: const Color(0xFFD7F1DD),
+                                          child: Container(
+                                            width: 34,
+                                            height: 34,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Color(0xFF66BB6A),
+                                                  Color(0xFF2E7D32),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              dayTag,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                _formatRevenueDay(entry.date),
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${_weekdayName(entry.date.weekday)} • ${entry.orders} orders',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey[600],
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                          '₹${entry.revenue.toStringAsFixed(0)}',
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF2E7D32),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: 6),
+                              ];
+                            }),
+                        ],
                       );
                     }
 
@@ -4367,10 +4699,42 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     );
   }
 
+  Widget _buildRevenueFilterTab(String label, String value) {
+    final isSelected = _revenueRange == value;
+    return GestureDetector(
+      onTap: () => setState(() => _revenueRange = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2E7D32) : const Color(0xFFF2F3F5),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2E7D32) : const Color(0xFFE2E5E8),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : Colors.black87,
+          ),
+        ),
+      ),
+    );
+  }
+
   Stream<QuerySnapshot> _getOrdersStream() {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('orders')
         .where('restaurantId', isEqualTo: widget.restaurantId);
+
+    if (widget.showDailyRevenue) {
+      return query
+          .where('status', isEqualTo: 'pickedUp')
+          .orderBy('createdAt', descending: true)
+          .snapshots();
+    }
 
     // Apply filter
     if (_filterType == 'completed') {
@@ -4400,6 +4764,205 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+  }
+
+  String _formatRevenueDay(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final target = DateTime(date.year, date.month, date.day);
+
+    if (target == today) {
+      return 'Today';
+    }
+    if (target == yesterday) {
+      return 'Yesterday';
+    }
+    return '${date.day} ${_monthName(date.month)}';
+  }
+
+  List<_DailyRevenueEntry> _buildDailyRevenueEntries(
+    List<QueryDocumentSnapshot> docs,
+  ) {
+    final Map<DateTime, _DayRevenueSummary> dailyRevenueMap = {};
+
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final createdAt = data['createdAt'] as Timestamp?;
+      if (createdAt == null) {
+        continue;
+      }
+
+      final date = createdAt.toDate();
+      if (!_isInRevenueRange(date)) {
+        continue;
+      }
+
+      final dayKey = DateTime(date.year, date.month, date.day);
+      final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+      final price = (data['price'] as num?)?.toDouble() ?? 0;
+      final revenue = quantity * price;
+
+      final existing = dailyRevenueMap[dayKey];
+      if (existing == null) {
+        dailyRevenueMap[dayKey] = _DayRevenueSummary(revenue: revenue, orders: 1);
+      } else {
+        dailyRevenueMap[dayKey] = _DayRevenueSummary(
+          revenue: existing.revenue + revenue,
+          orders: existing.orders + 1,
+        );
+      }
+    }
+
+    final sortedDayKeys = dailyRevenueMap.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return sortedDayKeys
+        .map(
+          (day) => _DailyRevenueEntry(
+            date: day,
+            revenue: dailyRevenueMap[day]!.revenue,
+            orders: dailyRevenueMap[day]!.orders,
+          ),
+        )
+        .toList();
+  }
+
+  List<DateTime> _extractMonthKeys(List<_DailyRevenueEntry> entries) {
+    final monthKeys = <DateTime>[];
+    for (final entry in entries) {
+      final monthKey = DateTime(entry.date.year, entry.date.month);
+      if (!monthKeys.contains(monthKey)) {
+        monthKeys.add(monthKey);
+      }
+    }
+    return monthKeys;
+  }
+
+  Map<DateTime, double> _buildMonthTotals(List<_DailyRevenueEntry> entries) {
+    final monthTotals = <DateTime, double>{};
+    for (final entry in entries) {
+      final monthKey = DateTime(entry.date.year, entry.date.month);
+      monthTotals[monthKey] = (monthTotals[monthKey] ?? 0) + entry.revenue;
+    }
+    return monthTotals;
+  }
+
+  bool _isInRevenueRange(DateTime date) {
+    final now = DateTime.now();
+    final day = DateTime(date.year, date.month, date.day);
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (_revenueRange == 'month') {
+      return day.year == today.year && day.month == today.month;
+    }
+
+    if (_revenueRange == '30d') {
+      final start = today.subtract(const Duration(days: 29));
+      return !day.isBefore(start) && !day.isAfter(today);
+    }
+
+    return true;
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    if (month < 1 || month > 12) {
+      return 'Unknown';
+    }
+    return months[month - 1];
+  }
+
+  String _weekdayName(int weekday) {
+    const weekdays = [
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
+    ];
+    if (weekday < 1 || weekday > 7) {
+      return 'Day';
+    }
+    return weekdays[weekday - 1];
+  }
+}
+
+class _DayRevenueSummary {
+  const _DayRevenueSummary({required this.revenue, required this.orders});
+
+  final double revenue;
+  final int orders;
+}
+
+class _DailyRevenueEntry {
+  const _DailyRevenueEntry({
+    required this.date,
+    required this.revenue,
+    required this.orders,
+  });
+
+  final DateTime date;
+  final double revenue;
+  final int orders;
+}
+
+class _RevenueMetricPill extends StatelessWidget {
+  const _RevenueMetricPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.84),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
