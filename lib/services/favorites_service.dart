@@ -170,7 +170,32 @@ class FavoritesService {
             name = rawValue.toString();
           }
 
-          if (imageUrl.isEmpty) {
+          var shouldInclude = true;
+
+          try {
+            final restaurantDoc = await _firestore
+                .collection('restaurants')
+                .doc(entry.key)
+                .get();
+            final restaurantData = restaurantDoc.data();
+
+            if (restaurantData == null) {
+              shouldInclude = false;
+            } else {
+              final status = (restaurantData['status'] ?? 'pending')
+                  .toString()
+                  .toLowerCase();
+              // Only surface restaurants that are approved for customers.
+              shouldInclude = status == 'approved';
+              name = (restaurantData['name'] ?? name).toString();
+              imageUrl = (restaurantData['imageUrl'] ?? imageUrl).toString();
+            }
+          } catch (e) {
+            debugPrint('Error fetching restaurant favorite metadata: $e');
+            shouldInclude = false;
+          }
+
+          if (imageUrl.isEmpty && shouldInclude) {
             try {
               final restaurantDoc = await _firestore
                   .collection('restaurants')
@@ -186,11 +211,13 @@ class FavoritesService {
             }
           }
 
-          return {'id': entry.key, 'name': name, 'imageUrl': imageUrl};
+          return shouldInclude
+              ? {'id': entry.key, 'name': name, 'imageUrl': imageUrl}
+              : null;
         }),
       );
 
-      return favorites;
+      return favorites.whereType<Map<String, dynamic>>().toList();
     }
     return [];
   }

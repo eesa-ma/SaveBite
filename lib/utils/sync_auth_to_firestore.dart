@@ -13,19 +13,16 @@ class SyncAuthToFirestore {
   /// Sync current authenticated user to Firestore
   /// This will create a Firestore document for the user if it doesn't exist
   /// Note: Since we don't have the original name and role, we'll use defaults
-  Future<void> syncCurrentUserToFirestore({
-    String? name,
-    String? role,
-  }) async {
+  Future<void> syncCurrentUserToFirestore({String? name, String? role}) async {
     final user = _auth.currentUser;
-    
+
     if (user == null) {
       throw Exception('No user is currently logged in');
     }
 
     // Check if user already exists in Firestore using AuthService
     final exists = await _authService.userExistsInFirestore(user.uid);
-    
+
     if (exists) {
       debugPrint('User ${user.email} already exists in Firestore');
       return;
@@ -37,12 +34,14 @@ class SyncAuthToFirestore {
         'uid': user.uid,
         'name': name ?? user.displayName ?? 'Unknown User',
         'email': user.email ?? '',
+        'phone': user.phoneNumber ?? '',
         'role': role ?? 'User', // Default to 'User' if not specified
+        'status': 'active',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'syncedFromAuth': true, // Flag to indicate this was synced
       });
-      
+
       debugPrint('Successfully synced user ${user.email} to Firestore');
     } catch (e) {
       debugPrint('Failed to sync user to Firestore: $e');

@@ -53,10 +53,30 @@ class _InitialScreenState extends State<InitialScreen> {
       return;
     }
 
+    final status = (userData['status'] ?? 'active').toString().toLowerCase();
+    if (status == 'suspended') {
+      await _authService.logout();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account has been suspended. Please contact support.',
+          ),
+        ),
+      );
+      Navigator.of(context).pushReplacementNamed('/login');
+      return;
+    }
+
     // Route based on role
     final role = userData['role'];
     String route;
     switch (role) {
+      case 'Admin':
+        route = '/admin';
+        break;
       case 'Restaurant':
         route = '/restaurant';
         break;
@@ -77,11 +97,7 @@ class _InitialScreenState extends State<InitialScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.restaurant_menu,
-              size: 80,
-              color: Colors.white,
-            ),
+            const Icon(Icons.restaurant_menu, size: 80, color: Colors.white),
             const SizedBox(height: 20),
             const Text(
               'SaveBite',
@@ -94,10 +110,7 @@ class _InitialScreenState extends State<InitialScreen> {
             const SizedBox(height: 10),
             const Text(
               'Reducing Food Waste, One Meal at a Time',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.white70),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 40),

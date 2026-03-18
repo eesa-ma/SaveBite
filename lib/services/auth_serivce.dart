@@ -34,6 +34,7 @@ class AuthService {
           'email': email,
           'phone': phone ?? '',
           'role': role,
+          'status': 'active',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -64,6 +65,21 @@ class AuthService {
       email: email,
       password: password,
     );
+
+    final user = credential.user;
+    if (user == null) {
+      return null;
+    }
+
+    final userData = await getUserData(user.uid);
+    final status = (userData?['status'] ?? 'active').toString().toLowerCase();
+    if (status == 'suspended') {
+      await _auth.signOut();
+      throw Exception(
+        'Your account has been suspended. Please contact support.',
+      );
+    }
+
     return credential.user;
   }
 
@@ -128,5 +144,16 @@ class AuthService {
       'phone': normalizedPhone,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  Future<bool> isCurrentUserSuspended() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return false;
+    }
+
+    final userData = await getUserData(user.uid);
+    final status = (userData?['status'] ?? 'active').toString().toLowerCase();
+    return status == 'suspended';
   }
 }

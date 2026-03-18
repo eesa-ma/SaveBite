@@ -124,10 +124,33 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           .get();
       if (doc.exists) {
         final data = doc.data();
+        final status = (data?['status'] ?? 'pending').toString().toLowerCase();
+        if (status != 'approved') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This restaurant is not available right now.'),
+              ),
+            );
+          }
+          return;
+        }
         restaurantName = (data?['name'] ?? fallbackName).toString();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Restaurant not found.')),
+          );
+        }
+        return;
       }
     } catch (_) {
-      // Use fallback name.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open this restaurant.')),
+        );
+      }
+      return;
     }
 
     if (!mounted) {

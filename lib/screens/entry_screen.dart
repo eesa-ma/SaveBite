@@ -189,7 +189,10 @@ class _EntryScreenState extends State<EntryScreen> {
 
   Future<List<Restaurant>> _fetchRestaurants() async {
     try {
-      final snapshot = await _firestore.collection('restaurants').get();
+      final snapshot = await _firestore
+          .collection('restaurants')
+          .where('status', isEqualTo: 'approved')
+          .get();
       return snapshot.docs.map((doc) => Restaurant.fromFirestore(doc)).toList();
     } catch (e) {
       if (mounted) {
