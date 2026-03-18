@@ -5,6 +5,7 @@ class FoodItem {
   final String restaurantId;
   final String name;
   final String description;
+  final bool? isVeg;
   final String imageUrl;
   final double price;
   final int quantityAvailable;
@@ -16,6 +17,7 @@ class FoodItem {
     required this.restaurantId,
     required this.name,
     required this.description,
+    this.isVeg,
     required this.imageUrl,
     required this.price,
     required this.quantityAvailable,
@@ -34,6 +36,7 @@ class FoodItem {
       restaurantId: data['restaurantId'] ?? '',
       name: data['name'] ?? 'Item',
       description: data['description'] ?? '',
+      isVeg: data['isVeg'] is bool ? data['isVeg'] as bool : null,
       imageUrl: data['imageUrl'] ?? '',
       price: (priceValue is num) ? priceValue.toDouble() : 0.0,
       quantityAvailable: (quantityValue is num) ? quantityValue.toInt() : 0,

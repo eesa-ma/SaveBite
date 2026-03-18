@@ -31,6 +31,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       ValueNotifier<Map<String, int>>({});
   String _searchQuery = '';
   String _selectedCategory = 'All';
+  String _selectedFoodType = 'All';
   Set<String> _favoriteFoodItemIds = <String>{};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
@@ -285,7 +286,11 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
             final matchesCategory =
                 _selectedCategory == 'All' ||
                 item.description == _selectedCategory;
-            return matchesSearch && matchesCategory;
+            final matchesFoodType =
+                _selectedFoodType == 'All' ||
+                (_selectedFoodType == 'Veg' && item.isVeg == true) ||
+                (_selectedFoodType == 'Non-Veg' && item.isVeg == false);
+            return matchesSearch && matchesCategory && matchesFoodType;
           }).toList();
 
           final categories = [
@@ -305,6 +310,8 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                   children: [
                     // Category filter
                     _buildCategoryFilter(categories),
+                    // Veg / Non-Veg filter
+                    _buildFoodTypeFilter(),
                     // Food items
                     _buildFoodsList(filteredItems, user),
                     const SizedBox(height: 80), // Space for FAB
@@ -481,6 +488,46 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
     );
   }
 
+  Widget _buildFoodTypeFilter() {
+    final filters = ['All', 'Veg', 'Non-Veg'];
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: filters.map((filter) {
+            final isSelected = _selectedFoodType == filter;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(filter),
+                selected: isSelected,
+                onSelected: (_) {
+                  setState(() {
+                    _selectedFoodType = filter;
+                  });
+                },
+                backgroundColor: theme.cardColor,
+                selectedColor: _primaryColor,
+                labelStyle: TextStyle(
+                  color: isSelected
+                      ? Colors.white
+                      : theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+                side: BorderSide(
+                  color: isSelected ? _primaryColor : _lightGrey,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFoodItemCard(FoodItem item, User? user) {
     final isSoldOut = item.quantityAvailable <= 0 || !item.isAvailable;
     final isFavorite = _favoriteFoodItemIds.contains(item.id);
@@ -538,6 +585,30 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                           ),
                         ),
                       ),
+                      if (item.isVeg != null)
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: item.isVeg!
+                                ? const Color(0xFFE8F5E9)
+                                : const Color(0xFFFFEBEE),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            item.isVeg! ? 'Veg' : 'Non-Veg',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: item.isVeg!
+                                  ? const Color(0xFF2E7D32)
+                                  : const Color(0xFFC62828),
+                            ),
+                          ),
+                        ),
                       IconButton(
                         onPressed: () => _toggleFoodFavorite(item),
                         icon: Icon(

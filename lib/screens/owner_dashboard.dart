@@ -79,6 +79,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final data = doc.data() ?? {};
     final priceValue = data['price'];
     final quantityValue = data['quantityAvailable'];
+    final isVegValue = data['isVeg'];
 
     return _MenuItem(
       id: doc.id,
@@ -87,6 +88,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       imageUrl: data['imageUrl'] ?? '',
       price: (priceValue is num) ? priceValue.toDouble() : 0.0,
       isAvailable: data['isAvailable'] ?? true,
+      isVeg: isVegValue is bool ? isVegValue : null,
       category: data['category'] ?? 'Menu',
       emoji: data['emoji'] ?? '🍽️',
       quantity: (quantityValue is num) ? quantityValue.toInt() : 0,
@@ -272,6 +274,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final categoryController = TextEditingController();
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
+    bool isVeg = true;
     File? selectedImageFile;
     bool isSubmitting = false;
 
@@ -344,6 +347,42 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Food Type',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Veg'),
+                      selected: isVeg,
+                      onSelected: isSubmitting
+                          ? null
+                          : (_) {
+                              setDialogState(() {
+                                isVeg = true;
+                              });
+                            },
+                    ),
+                    ChoiceChip(
+                      label: const Text('Non-Veg'),
+                      selected: !isVeg,
+                      onSelected: isSubmitting
+                          ? null
+                          : (_) {
+                              setDialogState(() {
+                                isVeg = false;
+                              });
+                            },
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -391,6 +430,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                           restaurantId: restaurantId,
                           name: name,
                           category: category,
+                          isVeg: isVeg,
                           price: price,
                           quantityAvailable: quantity,
                           imageUrl: imageUrl,
@@ -1138,7 +1178,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           return _FoodMenuManager(
             menuItems: const [],
             onToggleAvailability: (_) async {},
-            onUpdateItem: (item, name, description, price, quantity) async {},
+            onUpdateItem:
+                (item, name, description, price, quantity, isVeg) async {},
             onDeleteItem: (_) async {},
             errorText: 'Unable to load menu items.',
           );
@@ -1172,11 +1213,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               'isAvailable': !item.isAvailable,
             });
           },
-          onUpdateItem: (item, name, description, price, quantity) {
+          onUpdateItem: (item, name, description, price, quantity, isVeg) {
             return _restaurantService.updateMenuItem(item.id, {
               'name': name,
               'description': description,
               'category': description,
+              'isVeg': isVeg,
               'price': price,
               'quantityAvailable': quantity,
               'isAvailable': quantity > 0,
@@ -2372,6 +2414,7 @@ class _FoodMenuManager extends StatefulWidget {
     String description,
     double price,
     int quantity,
+    bool isVeg,
   )
   onUpdateItem;
   final Future<void> Function(_MenuItem item) onDeleteItem;
@@ -2574,6 +2617,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
     final quantityController = TextEditingController(
       text: item.quantity.toString(),
     );
+    bool isVeg = item.isVeg ?? true;
 
     showDialog(
       context: context,
@@ -2634,6 +2678,41 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    StatefulBuilder(
+                      builder: (context, setStateInDialog) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Food Type'),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Veg'),
+                                  selected: isVeg,
+                                  onSelected: (_) {
+                                    setStateInDialog(() {
+                                      isVeg = true;
+                                    });
+                                  },
+                                ),
+                                ChoiceChip(
+                                  label: const Text('Non-Veg'),
+                                  selected: !isVeg,
+                                  onSelected: (_) {
+                                    setStateInDialog(() {
+                                      isVeg = false;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -2654,7 +2733,7 @@ class _FoodMenuManagerState extends State<_FoodMenuManager> {
                     int.tryParse(quantityController.text) ?? item.quantity;
 
                 widget
-                    .onUpdateItem(item, name, category, price, quantity)
+                    .onUpdateItem(item, name, category, price, quantity, isVeg)
                     .then((_) {
                       if (!mounted || !dialogContext.mounted) {
                         return;
@@ -2785,6 +2864,35 @@ class _MenuItemCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: item.isVeg == null
+                          ? const Color(0xFFF1F3F4)
+                          : (item.isVeg!
+                                ? const Color(0xFFE8F5E9)
+                                : const Color(0xFFFFEBEE)),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      item.isVeg == null
+                          ? 'Type not set'
+                          : (item.isVeg! ? 'Veg' : 'Non-Veg'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: item.isVeg == null
+                            ? const Color(0xFF616161)
+                            : (item.isVeg!
+                                  ? const Color(0xFF2E7D32)
+                                  : const Color(0xFFC62828)),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -2958,6 +3066,7 @@ class _MenuItem {
     required this.imageUrl,
     required this.price,
     required this.isAvailable,
+    this.isVeg,
     required this.category,
     required this.emoji,
     required this.quantity,
@@ -2969,6 +3078,7 @@ class _MenuItem {
   final String imageUrl;
   double price;
   bool isAvailable;
+  bool? isVeg;
   final String category;
   final String emoji;
   int quantity;
@@ -4291,12 +4401,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
                         children: [
                           Container(
-                            padding: const EdgeInsets.fromLTRB(
-                              16,
-                              14,
-                              16,
-                              14,
-                            ),
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
@@ -4438,7 +4543,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFE8F5E9),
-                                          borderRadius: BorderRadius.circular(999),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
                                         ),
                                         child: Text(
                                           '₹${monthTotal.toStringAsFixed(0)}',
@@ -4453,8 +4560,10 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                   ),
                                 ),
                                 ...monthEntries.map((entry) {
-                                  final dayTag =
-                                      '${entry.date.day}'.padLeft(2, '0');
+                                  final dayTag = '${entry.date.day}'.padLeft(
+                                    2,
+                                    '0',
+                                  );
 
                                   return Container(
                                     margin: const EdgeInsets.only(bottom: 8),
@@ -4482,7 +4591,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
                                       children: [
                                         CircleAvatar(
                                           radius: 19,
-                                          backgroundColor: const Color(0xFFD7F1DD),
+                                          backgroundColor: const Color(
+                                            0xFFD7F1DD,
+                                          ),
                                           child: Container(
                                             width: 34,
                                             height: 34,
@@ -4709,7 +4820,9 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
           color: isSelected ? const Color(0xFF2E7D32) : const Color(0xFFF2F3F5),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: isSelected ? const Color(0xFF2E7D32) : const Color(0xFFE2E5E8),
+            color: isSelected
+                ? const Color(0xFF2E7D32)
+                : const Color(0xFFE2E5E8),
           ),
         ),
         child: Text(
@@ -4805,7 +4918,10 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
 
       final existing = dailyRevenueMap[dayKey];
       if (existing == null) {
-        dailyRevenueMap[dayKey] = _DayRevenueSummary(revenue: revenue, orders: 1);
+        dailyRevenueMap[dayKey] = _DayRevenueSummary(
+          revenue: revenue,
+          orders: 1,
+        );
       } else {
         dailyRevenueMap[dayKey] = _DayRevenueSummary(
           revenue: existing.revenue + revenue,
@@ -4888,15 +5004,7 @@ class _OrderHistorySheetState extends State<_OrderHistorySheet> {
   }
 
   String _weekdayName(int weekday) {
-    const weekdays = [
-      'Mon',
-      'Tue',
-      'Wed',
-      'Thu',
-      'Fri',
-      'Sat',
-      'Sun',
-    ];
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     if (weekday < 1 || weekday > 7) {
       return 'Day';
     }
