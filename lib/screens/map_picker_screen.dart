@@ -15,7 +15,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   LatLng? selectedLocation;
   String selectedAddress = "";
   late MapController mapController;
+  final TextEditingController _searchController = TextEditingController();
   bool isLoading = true;
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -84,6 +86,54 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     }
   }
 
+  Future<void> _searchLocation() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+    });
+
+    try {
+      final results = await locationFromAddress(query);
+      if (results.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No location found.')),
+          );
+        }
+        return;
+      }
+
+      final match = results.first;
+      final latLng = LatLng(match.latitude, match.longitude);
+      mapController.move(latLng, 15);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        selectedLocation = latLng;
+      });
+      await _getAddress(latLng);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not search this location.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,6 +177,44 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                   ],
                 ),
             ],
+          ),
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(12),
+              child: TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _searchLocation(),
+                decoration: InputDecoration(
+                  hintText: 'Search location',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _isSearching
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          onPressed: _searchLocation,
+                          icon: const Icon(Icons.arrow_forward),
+                        ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
           ),
           if (isLoading)
             const Center(
@@ -195,6 +283,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     mapController.dispose();
     super.dispose();
   }

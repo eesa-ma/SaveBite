@@ -63,12 +63,12 @@ class _ProfileSyncScreenState extends State<ProfileSyncScreen> {
   }
 
   String _routeForRole(String role) {
-    switch (role) {
-      case 'Restaurant':
+    switch (role.toLowerCase()) {
+      case 'restaurant':
         return '/restaurant';
-      case 'Admin':
+      case 'admin':
         return '/admin';
-      case 'User':
+      case 'user':
       default:
         return '/entry';
     }

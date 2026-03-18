@@ -33,6 +33,7 @@ class RestaurantService {
       'email': email,
       'hours': hours,
       'isOpen': isOpen,
+      'status': 'pending',
       'latitude': latitude,
       'longitude': longitude,
       'imageUrl': imageUrl,
