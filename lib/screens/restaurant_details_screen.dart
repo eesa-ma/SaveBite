@@ -657,29 +657,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                         ),
                       ),
                       if (item.isVeg != null)
-                        Container(
-                          margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: item.isVeg!
-                                ? const Color(0xFFE8F5E9)
-                                : const Color(0xFFFFEBEE),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            item.isVeg! ? 'Veg' : 'Non-Veg',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: item.isVeg!
-                                  ? const Color(0xFF2E7D32)
-                                  : const Color(0xFFC62828),
-                            ),
-                          ),
-                        ),
+                        _buildFoodTypeIndicator(item.isVeg!),
                       IconButton(
                         onPressed: () => _toggleFoodFavorite(item),
                         icon: Icon(
@@ -734,6 +712,37 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFoodTypeIndicator(bool isVeg) {
+    final indicatorColor = isVeg
+        ? const Color(0xFF2E7D32)
+        : const Color(0xFFC62828);
+
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: indicatorColor, width: 1.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      alignment: Alignment.center,
+      child: isVeg
+          ? Container(
+              width: 9,
+              height: 9,
+              decoration: const BoxDecoration(
+                color: Color(0xFF2E7D32),
+                shape: BoxShape.circle,
+              ),
+            )
+          : CustomPaint(
+              size: const Size(10, 10),
+              painter: _TriangleIndicatorPainter(color: Color(0xFFC62828)),
+            ),
     );
   }
 
@@ -1247,5 +1256,31 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
         ),
       ),
     );
+  }
+}
+
+class _TriangleIndicatorPainter extends CustomPainter {
+  const _TriangleIndicatorPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TriangleIndicatorPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
