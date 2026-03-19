@@ -490,7 +490,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
 
   Widget _buildFoodTypeFilter() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -506,7 +506,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                 });
               },
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             _buildFoodTypePill(
               isVeg: false,
               isSelected: _selectedFoodType == 'Non-Veg',
@@ -539,39 +539,39 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
-        width: 96,
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        width: 82,
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: isSelected ? accentColor : const Color(0xFFD8D8D8),
-            width: 1.6,
+            width: 1.4,
           ),
         ),
         child: Row(
           children: [
             Container(
-              width: 24,
-              height: 24,
+              width: 19,
+              height: 19,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: accentColor, width: 1.8),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: accentColor, width: 1.5),
                 color: isSelected
                     ? accentColor.withValues(alpha: 0.12)
                     : Colors.transparent,
               ),
               child: Icon(
                 isVeg ? Icons.circle : Icons.change_history,
-                size: 13,
+                size: 10,
                 color: accentColor,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Expanded(
               child: Container(
-                height: 12,
+                height: 9,
                 decoration: BoxDecoration(
                   color: const Color(0xFFE7E8EB),
                   borderRadius: BorderRadius.circular(999),
@@ -581,7 +581,7 @@ class _RestaurantDetailsScreenState extends State<RestaurantDetailsScreen> {
                       ? Alignment.centerRight
                       : Alignment.centerLeft,
                   child: Container(
-                    width: 16,
+                    width: 12,
                     margin: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
                       color: isSelected
