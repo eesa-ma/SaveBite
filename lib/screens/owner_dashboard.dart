@@ -3176,6 +3176,31 @@ Future<void> _showNotifications(
     }
   }
 
+  Color reportStatusColor(String status) {
+    switch (status) {
+      case 'reviewed':
+        return const Color(0xFF1565C0);
+      case 'resolved':
+        return const Color(0xFF2E7D32);
+      default:
+        return const Color(0xFFEF6C00);
+    }
+  }
+
+  IconData reportReasonIcon(String reason) {
+    final normalized = reason.toLowerCase();
+    if (normalized.contains('poison')) {
+      return Icons.warning_amber_rounded;
+    }
+    if (normalized.contains('expired')) {
+      return Icons.event_busy_outlined;
+    }
+    if (normalized.contains('incorrect')) {
+      return Icons.assignment_late_outlined;
+    }
+    return Icons.flag_outlined;
+  }
+
   final snapshot = await FirebaseFirestore.instance
       .collection('orders')
       .where('restaurantId', isEqualTo: restaurantId)
@@ -3200,6 +3225,21 @@ Future<void> _showNotifications(
     final status = (doc.data()['status'] ?? '').toString();
     return status.isNotEmpty;
   }).toList();
+
+  final reportsSnapshot = await FirebaseFirestore.instance
+      .collection('reports')
+      .where('restaurantId', isEqualTo: restaurantId)
+      .limit(150)
+      .get();
+
+  final reportDocs = reportsSnapshot.docs.toList();
+  reportDocs.sort((a, b) {
+    final aTs = a.data()['createdAt'];
+    final bTs = b.data()['createdAt'];
+    final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(1970);
+    final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(1970);
+    return bDate.compareTo(aDate);
+  });
 
   if (!context.mounted) {
     return;
@@ -3316,6 +3356,100 @@ Future<void> _showNotifications(
         );
       }
 
+      Widget buildReportCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+        final data = doc.data();
+        final foodName = (data['foodName'] ?? 'Food item').toString();
+        final reason = (data['reason'] ?? 'Issue reported').toString();
+        final description = (data['description'] ?? '').toString();
+        final status = (data['status'] ?? 'pending').toString();
+        final createdAt = data['createdAt'] as Timestamp?;
+        final time = createdAt?.toDate() ?? DateTime.now();
+        final color = reportStatusColor(status);
+
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: color.withValues(alpha: 0.12),
+                      child: Icon(reportReasonIcon(reason), color: color),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        foodName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        status.toUpperCase(),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  reason,
+                  style: TextStyle(
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  formatTimeAgo(time),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       return Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -3323,7 +3457,7 @@ Future<void> _showNotifications(
           width: double.infinity,
           height: 600,
           child: DefaultTabController(
-            length: 2,
+            length: 3,
             child: Column(
               children: [
                 Container(
@@ -3385,6 +3519,7 @@ Future<void> _showNotifications(
                     tabs: [
                       Tab(text: 'New Orders'),
                       Tab(text: 'All Updates'),
+                      Tab(text: 'Reports'),
                     ],
                   ),
                 ),
@@ -3407,6 +3542,14 @@ Future<void> _showNotifications(
                               itemCount: allUpdateDocs.length,
                               itemBuilder: (_, i) =>
                                   buildOrderCard(allUpdateDocs[i]),
+                            ),
+                      reportDocs.isEmpty
+                          ? buildEmpty('No food safety reports yet.')
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                              itemCount: reportDocs.length,
+                              itemBuilder: (_, i) =>
+                                  buildReportCard(reportDocs[i]),
                             ),
                     ],
                   ),
