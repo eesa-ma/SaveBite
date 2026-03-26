@@ -91,5 +91,46 @@ service cloud.firestore {
       allow read, write: if isAdmin()
                          || (request.auth != null && request.auth.uid == userId);
     }
+
+    // Food safety reports
+    match /reports/{reportId} {
+      // Admin can read all. Reporter and restaurant owner can read related reports.
+      allow read: if isAdmin()
+                  || (isSignedIn() && resource.data.userId == request.auth.uid)
+                  || (isSignedIn() && isRestaurantOwner(resource.data.restaurantId));
+
+      // Authenticated users can create reports only for themselves.
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.restaurantId is string
+                    && request.resource.data.restaurantId != ''
+                    && request.resource.data.orderId is string
+                    && request.resource.data.orderId != ''
+                    && request.resource.data.reason is string
+                    && request.resource.data.reason != ''
+                    && request.resource.data.description is string
+                    && request.resource.data.description != ''
+                    && request.resource.data.status == 'pending';
+
+      // Only admins can review/resolve/update/delete reports.
+      allow update, delete: if isAdmin();
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      // Owner of the notification and admins can read.
+      allow read: if isAdmin()
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // Allow create for authenticated users. (Needed for report submission flow.)
+      allow create: if isSignedIn();
+
+      // Owner can update basic read state, admin can update/delete everything.
+      allow update: if isAdmin()
+                    || (isSignedIn()
+                        && resource.data.userId == request.auth.uid
+                        && request.resource.data.userId == resource.data.userId);
+      allow delete: if isAdmin();
+    }
   }
 }

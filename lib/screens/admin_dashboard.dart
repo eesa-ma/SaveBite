@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:save_bite/services/auth_serivce.dart';
+import 'package:save_bite/screens/admin_reports_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -159,7 +160,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Panel'),
@@ -175,6 +176,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Tab(icon: Icon(Icons.dashboard), text: 'Dashboard'),
               Tab(icon: Icon(Icons.people), text: 'Users'),
               Tab(icon: Icon(Icons.store), text: 'Restaurants'),
+              Tab(icon: Icon(Icons.flag), text: 'Reports'),
             ],
           ),
         ),
@@ -197,6 +199,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _setRestaurantStatus(restaurantId, 'suspended'),
               onDelete: _deleteRestaurant,
             ),
+            const AdminReportsScreen(),
           ],
         ),
       ),

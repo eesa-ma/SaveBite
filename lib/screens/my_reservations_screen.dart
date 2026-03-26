@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:save_bite/screens/report_issue_dialog.dart';
 
 class _OrderHistoryGroup {
   const _OrderHistoryGroup({required this.key, required this.orders});
@@ -478,6 +479,20 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
                           foregroundColor: Colors.white,
                         ),
                       ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      _showReportIssueDialog(context, primaryOrderId, data),
+                  icon: const Icon(Icons.flag, size: 16),
+                  label: const Text('Report Issue'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red[700],
+                    side: BorderSide(color: Colors.red[300]!),
+                  ),
+                ),
               ),
             ],
             const SizedBox(height: 10),
@@ -1257,6 +1272,53 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
     } catch (_) {
       return false;
     }
+  }
+
+  void _showReportIssueDialog(
+    BuildContext context,
+    String orderId,
+    Map<String, dynamic> orderData,
+  ) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to report an issue')),
+      );
+      return;
+    }
+
+    final foodId = (orderData['foodItemId'] ?? '').toString();
+    final foodName = (orderData['foodName'] ?? 'Item').toString();
+    final restaurantId = (orderData['restaurantId'] ?? '').toString();
+    final restaurantName = (orderData['restaurantName'] ?? 'Restaurant')
+        .toString();
+
+    showDialog(
+      context: context,
+      builder: (context) => ReportIssueDialog(
+        orderId: orderId,
+        foodName: foodName,
+        restaurantName: restaurantName,
+        restaurantId: restaurantId,
+        foodId: foodId,
+        userId: user.uid,
+        onSuccess: () {
+          // Refresh the UI or show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Thank you for your report. Our team will review it.',
+                ),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.green,
+              ),
+            );
+            setState(() {}); // Refresh to update order state if needed
+          }
+        },
+      ),
+    );
   }
 
   void _showOrderDetails(BuildContext context, Map<String, dynamic> order) {
