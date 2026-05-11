@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ReportService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static const int COMPLAINT_SUSPENSION_THRESHOLD = 5;
+    static const int complaintSuspensionThreshold = 5;
 
   /// Submit a food safety report
   Future<void> submitReport({
@@ -48,7 +48,7 @@ class ReportService {
         await restaurantRef.update({'complaintCount': newComplaintCount});
 
         // Step 4: Suspend restaurant if threshold reached
-        if (newComplaintCount >= COMPLAINT_SUSPENSION_THRESHOLD) {
+        if (newComplaintCount >= complaintSuspensionThreshold) {
           await restaurantRef.update({
             'status': 'suspended',
             'isOpen': false,

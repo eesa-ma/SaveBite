@@ -341,49 +341,49 @@ class _EntryScreenState extends State<EntryScreen> {
       'name': 'Pizza',
       'cuisine': 'Italian',
       'keyword': 'pizza',
-      'image': 'https://via.placeholder.com/80x80?text=Pizza',
+      'image': 'assets/images/pizza.png',
     },
     {
       'name': 'Burger',
       'cuisine': 'American',
       'keyword': 'burger',
-      'image': 'https://via.placeholder.com/80x80?text=Burger',
+      'image': 'assets/images/burger.png',
     },
     {
       'name': 'Dosa',
       'cuisine': 'Indian',
       'keyword': 'dosa',
-      'image': 'https://via.placeholder.com/80x80?text=Dosa',
+      'image': 'assets/images/dosa.png',
     },
     {
       'name': 'Biryani',
       'cuisine': 'Indian',
       'keyword': 'biryani',
-      'image': 'https://via.placeholder.com/80x80?text=Biryani',
+      'image': 'assets/images/biryani.png',
     },
     {
       'name': 'Shawarma',
       'cuisine': 'All',
       'keyword': 'shawarma',
-      'image': 'https://via.placeholder.com/80x80?text=Shawarma',
+      'image': 'assets/images/shawarma.png',
     },
     {
       'name': 'Idli',
       'cuisine': 'Indian',
       'keyword': 'idli',
-      'image': 'https://via.placeholder.com/80x80?text=Idli',
+      'image': 'assets/images/idli.png',
     },
     {
       'name': 'Cake',
       'cuisine': 'All',
       'keyword': 'cake',
-      'image': 'https://via.placeholder.com/80x80?text=Cake',
+      'image': 'assets/images/cake.png',
     },
     {
       'name': 'Parotta',
       'cuisine': 'Indian',
       'keyword': 'parotta',
-      'image': 'https://via.placeholder.com/80x80?text=Parotta',
+      'image': 'assets/images/parotta.png',
     },
   ];
 
@@ -685,21 +685,37 @@ class _EntryScreenState extends State<EntryScreen> {
                             ),
                             child: Stack(
                               children: [
-                                Image.network(
-                                  category['image']!,
-                                  width: 80,
-                                  height: 80,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      color: Colors.grey[300],
-                                      child: Icon(
-                                        Icons.restaurant_menu,
-                                        color: Colors.grey[600],
+                                category['image']!.startsWith('assets/')
+                                    ? Image.asset(
+                                        category['image']!,
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey[300],
+                                            child: Icon(
+                                              Icons.restaurant_menu,
+                                              color: Colors.grey[600],
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : Image.network(
+                                        category['image']!,
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey[300],
+                                            child: Icon(
+                                              Icons.restaurant_menu,
+                                              color: Colors.grey[600],
+                                            ),
+                                          );
+                                        },
                                       ),
-                                    );
-                                  },
-                                ),
                                 if (isSelected)
                                   Container(
                                     width: 80,
